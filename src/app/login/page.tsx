@@ -1,16 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import styles from "./login.module.css";
+import styles from "../styles/login.module.css";
+import { teacherClasses } from "../home/data";
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("admin");
+  const [classCode, setClassCode] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const availableClasses = useMemo(() => {
+    if (role !== "teacher") return [];
+    const key = username.trim().toLowerCase();
+    return teacherClasses[key] ?? [];
+  }, [role, username]);
+
+  useEffect(() => {
+    if (role !== "teacher") return;
+    if (availableClasses.length === 0) {
+      setClassCode("");
+      return;
+    }
+    setClassCode((prev) => (prev ? prev : availableClasses[0]));
+  }, [role, availableClasses]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -21,7 +38,7 @@ export default function LoginPage() {
       const response = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role }),
+        body: JSON.stringify({ username, password, role, classCode }),
       });
 
       if (!response.ok) {
@@ -54,7 +71,10 @@ export default function LoginPage() {
               className={styles.input}
               name="role"
               value={role}
-              onChange={(event) => setRole(event.target.value)}
+              onChange={(event) => {
+                setRole(event.target.value);
+                setClassCode("");
+              }}
               required
             >
               <option value="admin">Admin</option>
@@ -73,10 +93,37 @@ export default function LoginPage() {
               name="username"
               autoComplete="username"
               value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              onChange={(event) => {
+                setUsername(event.target.value);
+                setClassCode("");
+              }}
               required
             />
           </label>
+
+          {role === "teacher" ? (
+            <label className={styles.label}>
+              Class (Assigned)
+              <select
+                className={styles.input}
+                value={classCode}
+                onChange={(event) => setClassCode(event.target.value)}
+                required
+                disabled={availableClasses.length === 0}
+              >
+                {availableClasses.length === 0 ? (
+                  <option value="" disabled>
+                    No classes found
+                  </option>
+                ) : null}
+                {availableClasses.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className={styles.label}>
             Password

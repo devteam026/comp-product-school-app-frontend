@@ -1,12 +1,7 @@
 "use client";
 
-import styles from "./home.module.css";
-
-const studentStats = {
-  total: 1240,
-  male: 620,
-  female: 620,
-};
+import styles from "../styles/home.module.css";
+import type { Student } from "./data";
 
 const attendanceToday = {
   present: 1104,
@@ -40,25 +35,43 @@ const maxMonthly = Math.max(
   ...monthlyFees.map((m) => m.paid + m.unpaid + m.free)
 );
 
-export default function HomeDashboard() {
+type HomeDashboardProps = {
+  students: Student[];
+};
+
+export default function HomeDashboard({ students }: HomeDashboardProps) {
+  const totalStudents = students.length;
+  const maleCount = students.filter((student) => student.gender === "Male").length;
+  const femaleCount = students.filter(
+    (student) => student.gender === "Female"
+  ).length;
+
   return (
     <div className={styles.dashboard}>
       <section className={styles.metricGrid}>
         <article className={styles.metricCard}>
           <h2 className={styles.metricTitle}>Total Students</h2>
-          <p className={styles.metricValue}>{studentStats.total}</p>
+          <p className={styles.metricValue}>{totalStudents}</p>
           <div className={styles.metricSplit}>
-            <span>Male: {studentStats.male}</span>
-            <span>Female: {studentStats.female}</span>
+            <span>Male: {maleCount}</span>
+            <span>Female: {femaleCount}</span>
           </div>
           <div className={styles.metricBar}>
             <span
               className={styles.metricFill}
-              style={{ width: `${(studentStats.male / studentStats.total) * 100}%` }}
+              style={{
+                width: `${
+                  totalStudents === 0 ? 0 : (maleCount / totalStudents) * 100
+                }%`,
+              }}
             />
             <span
               className={styles.metricFillAlt}
-              style={{ width: `${(studentStats.female / studentStats.total) * 100}%` }}
+              style={{
+                width: `${
+                  totalStudents === 0 ? 0 : (femaleCount / totalStudents) * 100
+                }%`,
+              }}
             />
           </div>
         </article>
