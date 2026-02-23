@@ -22,18 +22,8 @@ const dailyAttendance = [
   { day: "Fri", present: 1104, absent: 136 },
 ];
 
-const monthlyFees = [
-  { month: "Aug", paid: 820, unpaid: 210, free: 120 },
-  { month: "Sep", paid: 860, unpaid: 180, free: 110 },
-  { month: "Oct", paid: 900, unpaid: 170, free: 105 },
-  { month: "Nov", paid: 880, unpaid: 190, free: 115 },
-  { month: "Dec", paid: 890, unpaid: 350, free: 120 },
-];
 
 const maxDaily = Math.max(...dailyAttendance.map((d) => d.present + d.absent));
-const maxMonthly = Math.max(
-  ...monthlyFees.map((m) => m.paid + m.unpaid + m.free)
-);
 
 type HomeDashboardProps = {
   students: Student[];
@@ -191,53 +181,6 @@ export default function HomeDashboard({ students }: HomeDashboardProps) {
           </div>
         </article>
 
-        <article className={styles.chartCard}>
-          <div className={styles.chartHeader}>
-            <div>
-              <h3 className={styles.chartTitle}>Monthly Fees</h3>
-              <p className={styles.chartSubtitle}>Paid / Unpaid / Free (last 5 months)</p>
-            </div>
-          </div>
-          <div className={styles.legend}>
-            <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#6366f1" }} />
-              Paid
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#0ea5e9" }} />
-              Unpaid
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#f97316" }} />
-              Free
-            </span>
-          </div>
-          <div className={styles.chartBars}>
-            {monthlyFees.map((month) => {
-              const total = month.paid + month.unpaid + month.free;
-              return (
-                <div key={month.month} className={styles.chartBarGroup}>
-                  <div className={styles.chartStack}>
-                    <span
-                      className={styles.chartBarPrimary}
-                      style={{ height: `${(month.paid / maxMonthly) * 100}%` }}
-                    />
-                    <span
-                      className={styles.chartBarSecondary}
-                      style={{ height: `${(month.unpaid / maxMonthly) * 100}%` }}
-                    />
-                    <span
-                      className={styles.chartBarMuted}
-                      style={{ height: `${(month.free / maxMonthly) * 100}%` }}
-                    />
-                  </div>
-                  <span className={styles.chartLabel}>{month.month}</span>
-                  <span className={styles.chartValue}>{total}</span>
-                </div>
-              );
-            })}
-          </div>
-        </article>
       </section>
     </div>
   );

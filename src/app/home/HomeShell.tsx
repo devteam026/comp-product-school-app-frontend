@@ -5,13 +5,18 @@ import styles from "../styles/home.module.css";
 import LogoutButton from "./LogoutButton";
 import StudentManagement from "./StudentManagement";
 import AttendanceManagement from "./AttendanceManagement";
+import FeeManagement from "./FeeManagement";
+import AIEngine from "./AIEngine";
 import HomeDashboard from "./HomeDashboard";
-import { filterStudents, seedStudents, teacherClasses, type Student } from "./data";
+import { filterStudents, seedStudents, type Student } from "./data";
+import StudentProfileModal from "./StudentProfileModal";
 
 const menuItems = [
   "Home",
   "Student Management",
   "Attendance Management",
+  "Fee Management",
+  "AI Insights",
 ] as const;
 
 type MenuItem = (typeof menuItems)[number];
@@ -29,30 +34,77 @@ export default function HomeShell({
 }: HomeShellProps) {
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
   const [students, setStudents] = useState<Student[]>(seedStudents);
+  const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
 
   const role = displayRole.toLowerCase();
-  const adminClassOptions = useMemo(
-    () => Array.from(new Set(students.map((student) => student.classCode))).sort(),
-    [students]
-  );
-  const teacherOptions = teacherClasses[username.toLowerCase()] ?? [];
-  const initialClassSelection =
-    role === "admin"
-      ? "all"
-      : classCode && teacherOptions.includes(classCode)
-        ? classCode
-        : teacherOptions[0] ?? "";
-  const [activeClass, setActiveClass] = useState(initialClassSelection);
+  const [adminClassOptions, setAdminClassOptions] = useState<string[]>([]);
+  const [isAdminClassesLoading, setIsAdminClassesLoading] = useState(false);
+  const [teacherOptions, setTeacherOptions] = useState<string[]>([]);
+  const [isTeacherClassesLoading, setIsTeacherClassesLoading] = useState(false);
+  const [activeClass, setActiveClass] = useState(role === "admin" ? "all" : "");
+
+  useEffect(() => {
+    if (role !== "teacher") return;
+    let isActive = true;
+    setIsTeacherClassesLoading(true);
+    const token = window.localStorage.getItem("authToken");
+    fetch(`http://localhost:8081/api/classes/teacher/${encodeURIComponent(username)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: string[]) => {
+        if (!isActive) return;
+        const classes = Array.isArray(data) ? data : [];
+        setTeacherOptions(classes);
+        if (classes.length > 0) {
+          setActiveClass((prev) => (prev && classes.includes(prev) ? prev : classes[0]));
+        } else {
+          setActiveClass("");
+        }
+      })
+      .finally(() => {
+        if (isActive) setIsTeacherClassesLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [role, username]);
+
+  useEffect(() => {
+    if (role !== "admin") return;
+    let isActive = true;
+    setIsAdminClassesLoading(true);
+    const token = window.localStorage.getItem("authToken");
+    fetch("http://localhost:8081/api/classes", {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: string[]) => {
+        if (!isActive) return;
+        setAdminClassOptions(Array.isArray(data) ? data : []);
+      })
+      .finally(() => {
+        if (isActive) setIsAdminClassesLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [role]);
 
   const visibleStudents = useMemo(
     () => filterStudents(students, role, username, activeClass),
     [students, role, username, activeClass]
   );
 
+  const showNoClassNotice =
+    role === "teacher" && !isTeacherClassesLoading && teacherOptions.length === 0;
+
   const subtitleMap: Record<MenuItem, string> = {
     Home: "School overview for the day and month.",
     "Student Management": "Add and track students in one place.",
     "Attendance Management": "Track daily attendance for each class.",
+    "Fee Management": "Manage monthly fees, payments, and reports.",
+    "AI Insights": "AI insights and top-rated lists.",
   };
 
   const handleAddStudent = (student: Student) => {
@@ -131,11 +183,17 @@ export default function HomeShell({
                     onChange={(event) => setActiveClass(event.target.value)}
                   >
                     <option value="all">All</option>
-                    {adminClassOptions.map((code) => (
-                      <option key={code} value={code}>
-                        {code}
+                    {isAdminClassesLoading ? (
+                      <option value="" disabled>
+                        Loading...
                       </option>
-                    ))}
+                    ) : (
+                      adminClassOptions.map((code) => (
+                        <option key={code} value={code}>
+                          {code}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </label>
               ) : role === "teacher" ? (
@@ -145,9 +203,13 @@ export default function HomeShell({
                     className={styles.inlineSelect}
                     value={activeClass}
                     onChange={(event) => setActiveClass(event.target.value)}
-                    disabled={teacherOptions.length === 0}
+                    disabled={isTeacherClassesLoading || teacherOptions.length === 0}
                   >
-                    {teacherOptions.length === 0 ? (
+                    {isTeacherClassesLoading ? (
+                      <option value="" disabled>
+                        Loading...
+                      </option>
+                    ) : teacherOptions.length === 0 ? (
                       <option value="" disabled>
                         No classes
                       </option>
@@ -165,6 +227,12 @@ export default function HomeShell({
             </div>
           </header>
 
+          {showNoClassNotice ? (
+            <div className={styles.notice}>
+              No classes are assigned to your account yet. Please contact the admin.
+            </div>
+          ) : null}
+
           {activeItem === "Home" ? (
             <HomeDashboard students={visibleStudents} />
           ) : activeItem === "Student Management" ? (
@@ -175,11 +243,30 @@ export default function HomeShell({
               username={username}
               classCode={activeClass}
             />
-          ) : (
+          ) : activeItem === "Attendance Management" ? (
             <AttendanceManagement students={visibleStudents} />
+          ) : activeItem === "Fee Management" ? (
+            <FeeManagement students={visibleStudents} />
+          ) : (
+            <AIEngine
+              classCode={activeClass === "all" ? undefined : activeClass}
+              onStudentClick={(name) => {
+                const match = visibleStudents.find((student) => student.name === name);
+                if (match) {
+                  setSelectedProfile(match);
+                }
+              }}
+            />
           )}
         </main>
       </div>
+
+      {selectedProfile ? (
+        <StudentProfileModal
+          student={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+        />
+      ) : null}
     </div>
   );
 }

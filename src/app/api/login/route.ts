@@ -32,9 +32,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  if (normalizedRole === "teacher") {
+  if (normalizedRole === "teacher" && classCode) {
     const classes = teacherClasses[normalizedUsername] ?? [];
-    if (!classCode || !classes.includes(classCode)) {
+    if (!classes.includes(classCode)) {
       return NextResponse.json(
         { error: "Select a class assigned to this teacher" },
         { status: 401 }
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
 
   const sessionValue =
-    normalizedRole === "teacher"
+    normalizedRole === "teacher" && classCode
       ? `${normalizedRole}:${normalizedUsername}:${classCode}`
       : `${normalizedRole}:${normalizedUsername}`;
 

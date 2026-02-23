@@ -16,6 +16,7 @@ export type Student = {
   parentOccupation: string;
   status: "Active" | "Inactive";
   history: string[];
+  feeType: "Paid" | "Free";
 };
 
 export const seedStudents: Student[] = [
@@ -37,6 +38,7 @@ export const seedStudents: Student[] = [
     parentOccupation: "Nurse",
     status: "Active",
     history: ["Student record created"],
+    feeType: "Paid",
   },
   {
     id: "2",
@@ -56,6 +58,7 @@ export const seedStudents: Student[] = [
     parentOccupation: "Accountant",
     status: "Active",
     history: ["Student record created"],
+    feeType: "Paid",
   },
   {
     id: "3",
@@ -75,6 +78,7 @@ export const seedStudents: Student[] = [
     parentOccupation: "Engineer",
     status: "Active",
     history: ["Student record created"],
+    feeType: "Free",
   },
   {
     id: "4",
@@ -94,6 +98,7 @@ export const seedStudents: Student[] = [
     parentOccupation: "Teacher",
     status: "Active",
     history: ["Student record created"],
+    feeType: "Paid",
   },
   {
     id: "5",
@@ -113,6 +118,7 @@ export const seedStudents: Student[] = [
     parentOccupation: "Business Owner",
     status: "Active",
     history: ["Student record created"],
+    feeType: "Paid",
   },
 ];
 

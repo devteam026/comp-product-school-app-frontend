@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
+import StudentProfileModal from "./StudentProfileModal";
 
 const tabs = ["Add Student", "List Students"] as const;
 const pageSizeOptions = [10, 25, 50] as const;
@@ -587,6 +588,7 @@ export default function StudentManagement({
                   <tr>
                     <th>Name</th>
                     <th>Class</th>
+                    <th>Roll #</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -601,9 +603,10 @@ export default function StudentManagement({
                       >
                         {student.name}
                       </td>
-                        <td data-label="Class">{student.classCode}</td>
-                        <td data-label="Status">{student.status}</td>
-                        <td data-label="Actions">
+                      <td data-label="Class">{student.classCode}</td>
+                      <td data-label="Roll #">{student.rollNumber || "-"}</td>
+                      <td data-label="Status">{student.status}</td>
+                      <td data-label="Actions">
                           <div className={styles.actionRow}>
                             <button
                               className={styles.inlineButton}
@@ -679,107 +682,10 @@ export default function StudentManagement({
       )}
 
       {selectedStudent ? (
-        <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
-          <div className={styles.modalCard}>
-            <div className={styles.modalHeader}>
-              <div>
-                <h3>Student Profile</h3>
-                <p className={styles.modalSubtitle}>
-                  {selectedStudent.name} · Class {selectedStudent.classCode}
-                </p>
-              </div>
-              <button
-                className={styles.inlineButton}
-                type="button"
-                onClick={() => setSelectedStudent(null)}
-              >
-                Close
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <div className={styles.profileSection}>
-                <div className={styles.sectionTitle}>Student Details</div>
-                <div className={styles.profileGrid}>
-                  <div className={styles.profileField}>
-                    <span>Name</span>
-                    <div className={styles.profileValue}>{selectedStudent.name}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Class</span>
-                    <div className={styles.profileValue}>{selectedStudent.classCode}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Gender</span>
-                    <div className={styles.profileValue}>{selectedStudent.gender}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Date of Birth</span>
-                    <div className={styles.profileValue}>
-                      {selectedStudent.dateOfBirth || "-"}
-                    </div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Admission #</span>
-                    <div className={styles.profileValue}>
-                      {selectedStudent.admissionNumber || "-"}
-                    </div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Roll #</span>
-                    <div className={styles.profileValue}>{selectedStudent.rollNumber || "-"}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Status</span>
-                    <div className={styles.profileValue}>{selectedStudent.status}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Address</span>
-                    <div className={styles.profileValue}>{selectedStudent.address || "-"}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.profileSection}>
-                <div className={styles.sectionTitle}>Parent/Guardian</div>
-                <div className={styles.profileGrid}>
-                  <div className={styles.profileField}>
-                    <span>Name</span>
-                    <div className={styles.profileValue}>{selectedStudent.parentName || "-"}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Relation</span>
-                    <div className={styles.profileValue}>
-                      {selectedStudent.parentRelation || "-"}
-                    </div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Phone</span>
-                    <div className={styles.profileValue}>{selectedStudent.parentPhone || "-"}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Email</span>
-                    <div className={styles.profileValue}>{selectedStudent.parentEmail || "-"}</div>
-                  </div>
-                  <div className={styles.profileField}>
-                    <span>Occupation</span>
-                    <div className={styles.profileValue}>
-                      {selectedStudent.parentOccupation || "-"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.profileSection}>
-                <div className={styles.sectionTitle}>History</div>
-                <ul className={styles.historyList}>
-                  {selectedStudent.history.map((entry, index) => (
-                    <li key={`${entry}-${index}`}>{entry}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
+        <StudentProfileModal
+          student={selectedStudent}
+          onClose={() => setSelectedStudent(null)}
+        />
       ) : null}
 
       {editState ? (
