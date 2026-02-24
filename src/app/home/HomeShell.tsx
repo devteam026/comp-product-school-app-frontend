@@ -35,12 +35,16 @@ export default function HomeShell({
 }: HomeShellProps) {
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
   const [students, setStudents] = useState<Student[]>([]);
+  const [isStudentsLoading, setIsStudentsLoading] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
   const [dashboardData, setDashboardData] = useState<{
     attendanceToday?: { present: number; absent: number };
     feeStats?: { paid: number; unpaid: number; free: number };
     dailyAttendance?: { day: string; present: number; absent: number }[];
+    classAttendance?: { classCode: string; present: number; absent: number }[];
+    classStudentCounts?: { classCode: string; present: number; absent: number }[];
   } | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
 
   const role = displayRole.toLowerCase();
   const [adminClassOptions, setAdminClassOptions] = useState<string[]>([]);
@@ -114,6 +118,7 @@ export default function HomeShell({
   };
 
   const fetchStudents = async (code?: string) => {
+    setIsStudentsLoading(true);
     const token = window.localStorage.getItem("authToken");
     const params = new URLSearchParams();
     if (code && code !== "all") params.set("classCode", code);
@@ -123,9 +128,11 @@ export default function HomeShell({
     const response = await fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
-    if (!response.ok) return;
-    const data = (await response.json()) as Student[];
-    setStudents(Array.isArray(data) ? data : []);
+    if (response.ok) {
+      const data = (await response.json()) as Student[];
+      setStudents(Array.isArray(data) ? data : []);
+    }
+    setIsStudentsLoading(false);
   };
 
   const handleAddStudent = async (student: Student) => {
@@ -172,6 +179,7 @@ export default function HomeShell({
 
   useEffect(() => {
     let isActive = true;
+    setIsDashboardLoading(true);
     const token = window.localStorage.getItem("authToken");
     const classParam =
       activeClass && activeClass !== "all" ? `?classCode=${activeClass}` : "";
@@ -185,10 +193,15 @@ export default function HomeShell({
           attendanceToday: data.attendanceToday,
           feeStats: data.feeStats,
           dailyAttendance: data.dailyAttendance,
+          classAttendance: data.classAttendance,
+          classStudentCounts: data.classStudentCounts,
         });
       })
       .catch(() => {
         // keep fallback UI data
+      })
+      .finally(() => {
+        if (isActive) setIsDashboardLoading(false);
       });
     return () => {
       isActive = false;
@@ -292,7 +305,11 @@ export default function HomeShell({
           ) : null}
 
           {activeItem === "Home" ? (
-            <HomeDashboard students={visibleStudents} dashboardData={dashboardData} />
+            <HomeDashboard
+              students={visibleStudents}
+              dashboardData={dashboardData}
+              isLoading={isDashboardLoading}
+            />
           ) : activeItem === "Student Management" ? (
             <StudentManagement
               students={visibleStudents}
@@ -300,11 +317,12 @@ export default function HomeShell({
               role={role}
               username={username}
               classCode={activeClass}
+              isLoading={isStudentsLoading}
             />
           ) : activeItem === "Attendance Management" ? (
-            <AttendanceManagement students={visibleStudents} />
+            <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
           ) : activeItem === "Fee Management" ? (
-            <FeeManagement students={visibleStudents} />
+            <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
           ) : (
             <AIEngine
               classCode={activeClass === "all" ? undefined : activeClass}
@@ -314,6 +332,7 @@ export default function HomeShell({
                   setSelectedProfile(match);
                 }
               }}
+              isLoading={isStudentsLoading}
             />
           )}
         </main>

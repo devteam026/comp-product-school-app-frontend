@@ -24,6 +24,7 @@ type StudentManagementProps = {
   role: string;
   username: string;
   classCode?: string;
+  isLoading?: boolean;
 };
 
 type EditState = {
@@ -90,6 +91,7 @@ export default function StudentManagement({
   role,
   username,
   classCode,
+  isLoading,
 }: StudentManagementProps) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Add Student");
   const [name, setName] = useState("");
@@ -334,7 +336,14 @@ export default function StudentManagement({
         ))}
       </div>
 
-      {activeTab === "Add Student" ? (
+      {isLoading ? (
+        <div className={styles.loadingCard}>
+          <div className={styles.skeletonTitle} />
+          <div className={styles.skeletonLine} />
+          <div className={styles.skeletonLine} />
+          <div className={styles.skeletonLine} />
+        </div>
+      ) : activeTab === "Add Student" ? (
         <form className={styles.form} onSubmit={handleAddStudent}>
           <div className={styles.sectionTitle}>Student Details</div>
           <div className={styles.fieldRow}>

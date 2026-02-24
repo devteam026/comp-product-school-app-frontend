@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
@@ -8,30 +8,35 @@ import { apiUrl } from "../../lib/api";
 
 type AttendanceManagementProps = {
   students: Student[];
+  isLoading?: boolean;
 };
 
 type Status = "Present" | "Absent";
 
 const sortFields = ["name", "classCode", "rollNumber", "status"] as const;
 const pageSizeOptions = [10, 25, 50] as const;
-const tabs = ["Take Attendance", "Attendance List"] as const;
+const tabs = ["Take Attendance"] as const;
 
 type SortField = (typeof sortFields)[number];
 
 type Tab = (typeof tabs)[number];
 
-export default function AttendanceManagement({ students }: AttendanceManagementProps) {
+export default function AttendanceManagement({
+  students,
+  isLoading,
+}: AttendanceManagementProps) {
   const [activeTab, setActiveTab] = useState<Tab>("Take Attendance");
   const [attendanceDate, setAttendanceDate] = useState(
-    () => new Date().toISOString().slice(0, 10)
-  );
-  const [listDate, setListDate] = useState(
     () => new Date().toISOString().slice(0, 10)
   );
   const [attendance, setAttendance] = useState<Record<string, Status>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
+  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const isAttendanceDateLocked = attendanceDate !== todayDate;
 
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
@@ -66,6 +71,14 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
     }));
   };
 
+  const presentCount = useMemo(() => {
+    return students.filter((student) => attendance[student.id] !== "Absent").length;
+  }, [students, attendance]);
+
+  const absentCount = useMemo(() => {
+    return students.filter((student) => attendance[student.id] === "Absent").length;
+  }, [students, attendance]);
+
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage(null);
@@ -94,6 +107,7 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
       setSaveMessage(
         data?.ok ? "Attendance saved successfully." : "Attendance saved."
       );
+      loadAttendance(attendanceDate);
     } catch {
       setSaveMessage("Unable to save attendance. Try again.");
     } finally {
@@ -102,19 +116,28 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
   };
 
   const loadAttendance = async (date: string) => {
+    setIsAttendanceLoading(true);
     const token = window.localStorage.getItem("authToken");
     const response = await fetch(apiUrl(`/api/attendance?date=${date}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
-    if (!response.ok) return;
-    const data = await response.json().catch(() => null);
-    if (!data?.records) return;
-    const map: Record<string, Status> = {};
-    data.records.forEach((record: { studentId: string; status: Status }) => {
-      map[record.studentId] = record.status;
-    });
-    setAttendance(map);
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      if (data?.records) {
+        const map: Record<string, Status> = {};
+        data.records.forEach((record: { studentId: string; status: Status }) => {
+          map[record.studentId] = record.status;
+        });
+        setAttendance(map);
+      }
+    }
+    setIsAttendanceLoading(false);
   };
+
+  useEffect(() => {
+    loadAttendance(attendanceDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceDate]);
 
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -172,108 +195,25 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
         ))}
       </div>
 
-      {activeTab === "Take Attendance" ? (
-        <>
-          <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              Date
-              <input
-                className={styles.input}
-                type="date"
-                value={attendanceDate}
-                onChange={(event) => setAttendanceDate(event.target.value)}
-              />
-            </label>
-            <div className={styles.inlineActions}>
-              <button
-                className={styles.inlineButton}
-                type="button"
-                onClick={handleMarkAllPresent}
-                disabled={students.length === 0 || allPresent}
-              >
-                Mark All Present
-              </button>
-              <button
-                className={styles.button}
-                type="button"
-                onClick={handleSave}
-                disabled={students.length === 0 || isSaving}
-              >
-                {isSaving ? "Saving..." : "Save Attendance"}
-              </button>
-            </div>
+      {isLoading || isAttendanceLoading ? (
+        <div className={styles.loadingCard}>
+          <div className={styles.skeletonTitle} />
+          <div className={styles.skeletonLine} />
+          <div className={styles.skeletonLine} />
+          <div className={styles.skeletonTable}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className={styles.skeletonRow}>
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            ))}
           </div>
-
-          {saveMessage ? <div className={styles.saveMessage}>{saveMessage}</div> : null}
-
-          {students.length === 0 ? (
-            <div className={styles.empty}>No students available.</div>
-          ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Class</th>
-                  <th>Roll #</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((student) => {
-                  const status: Status = attendance[student.id] ?? "Present";
-                  return (
-                    <tr key={student.id}>
-                      <td>{student.name}</td>
-                      <td>{student.classCode}</td>
-                      <td>{student.rollNumber || "-"}</td>
-                      <td>
-                        <button
-                          className={
-                            status === "Present"
-                              ? styles.statusPresent
-                              : styles.statusAbsent
-                          }
-                          type="button"
-                          onClick={() => handleToggleAbsent(student.id)}
-                        >
-                          {status}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </>
+        </div>
       ) : (
         <>
           <div className={styles.listToolbar}>
-            <div className={styles.fieldRow}>
-              <label className={styles.label}>
-                Date
-                <input
-                  className={styles.input}
-                  type="date"
-                  value={listDate}
-                  onChange={(event) => {
-                    const nextDate = event.target.value;
-                    setListDate(nextDate);
-                    loadAttendance(nextDate);
-                  }}
-                />
-              </label>
-              <div className={styles.inlineActions}>
-                <button
-                  className={styles.button}
-                  type="button"
-                  onClick={handleSave}
-                  disabled={students.length === 0 || isSaving}
-                >
-                  {isSaving ? "Saving..." : "Save Attendance"}
-                </button>
-              </div>
-            </div>
             <input
               className={styles.searchInput}
               type="search"
@@ -342,53 +282,100 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
               >
                 {sortDir === "asc" ? "Asc" : "Desc"}
               </button>
+              <select
+                className={styles.inlineSelect}
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(
+                    Number(event.target.value) as (typeof pageSizeOptions)[number]
+                  );
+                  setPage(1);
+                }}
+              >
+                {pageSizeOptions.map((size) => (
+                  <option key={size} value={size}>
+                    {size} / page
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {pagedStudents.length === 0 ? (
-            <div className={styles.empty}>No students found.</div>
-          ) : (
-            <div className={styles.tableResponsive}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Roll #</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedStudents.map((student) => {
-                    const status: Status = attendance[student.id] ?? "Present";
-                    return (
-                      <tr key={student.id}>
-                        <td
-                          data-label="Name"
-                          className={styles.rowClickable}
-                          onClick={() => setSelectedStudent(student)}
-                        >
-                          {student.name}
-                        </td>
-                        <td data-label="Roll #">{student.rollNumber || "-"}</td>
-                        <td data-label="Status">
-                          <button
-                            className={
-                              status === "Present"
-                                ? styles.statusPresent
-                                : styles.statusAbsent
-                            }
-                            type="button"
-                            onClick={() => handleToggleAbsent(student.id)}
-                          >
-                            {status}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
+              Date
+              <input
+                className={styles.input}
+                type="date"
+                value={attendanceDate}
+                onChange={(event) => setAttendanceDate(event.target.value)}
+              />
+            </label>
+            <div className={styles.inlineActions}>
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={handleMarkAllPresent}
+                disabled={students.length === 0 || allPresent}
+              >
+                Mark All Present
+              </button>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => setShowConfirm(true)}
+                disabled={students.length === 0 || isSaving || isAttendanceDateLocked}
+              >
+                {isSaving ? "Saving..." : "Save Attendance"}
+              </button>
             </div>
+          </div>
+
+          {isAttendanceDateLocked ? (
+            <div className={styles.notice}>
+              Attendance can only be saved for today ({todayDate}).
+            </div>
+          ) : null}
+          {saveMessage ? <div className={styles.saveMessage}>{saveMessage}</div> : null}
+
+          {students.length === 0 ? (
+            <div className={styles.empty}>No students available.</div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Class</th>
+                  <th>Roll #</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedStudents.map((student) => {
+                  const status: Status = attendance[student.id] ?? "Present";
+                  return (
+                    <tr key={student.id}>
+                      <td>{student.name}</td>
+                      <td>{student.classCode}</td>
+                      <td>{student.rollNumber || "-"}</td>
+                      <td>
+                        <button
+                          className={
+                            status === "Present"
+                              ? styles.statusPresent
+                              : styles.statusAbsent
+                          }
+                          type="button"
+                          onClick={() => handleToggleAbsent(student.id)}
+                        >
+                          {status}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
 
           <div className={styles.pagination}>
@@ -428,22 +415,6 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
               >
                 Last
               </button>
-              <select
-                className={styles.inlineSelect}
-                value={pageSize}
-                onChange={(event) => {
-                  setPageSize(
-                    Number(event.target.value) as (typeof pageSizeOptions)[number]
-                  );
-                  setPage(1);
-                }}
-              >
-                {pageSizeOptions.map((size) => (
-                  <option key={size} value={size}>
-                    {size} / page
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
         </>
@@ -454,6 +425,45 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
           student={selectedStudent}
           onClose={() => setSelectedStudent(null)}
         />
+      ) : null}
+
+      {showConfirm ? (
+        <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
+          <div className={styles.modalCard}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h3>Confirm Attendance</h3>
+                <p className={styles.modalSubtitle}>
+                  Date {attendanceDate}
+                </p>
+              </div>
+            </div>
+            <div className={styles.modalBody}>
+              Present: {presentCount} · Absent: {absentCount}
+            </div>
+            <div className={styles.inlineActions}>
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => {
+                  setShowConfirm(false);
+                  handleSave();
+                }}
+                disabled={isSaving}
+              >
+                Confirm & Save
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

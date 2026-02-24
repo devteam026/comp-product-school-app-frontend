@@ -8,6 +8,7 @@ import { apiUrl } from "../../lib/api";
 
 type FeeManagementProps = {
   students: Student[];
+  isLoading?: boolean;
 };
 
 type Payment = {
@@ -39,7 +40,7 @@ function nextMonths(count: number) {
   return months;
 }
 
-export default function FeeManagement({ students }: FeeManagementProps) {
+export default function FeeManagement({ students, isLoading }: FeeManagementProps) {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedStudent, setSelectedStudent] = useState(
@@ -234,6 +235,17 @@ export default function FeeManagement({ students }: FeeManagementProps) {
       setSelectedIds([]);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className={styles.loadingCard}>
+        <div className={styles.skeletonTitle} />
+        <div className={styles.skeletonLine} />
+        <div className={styles.skeletonLine} />
+        <div className={styles.skeletonLine} />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.form}>

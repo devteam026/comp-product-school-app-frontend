@@ -7,9 +7,14 @@ import { apiUrl } from "../../lib/api";
 type AIEngineProps = {
   classCode?: string;
   onStudentClick?: (name: string) => void;
+  isLoading?: boolean;
 };
 
-export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
+export default function AIEngine({
+  classCode,
+  onStudentClick,
+  isLoading,
+}: AIEngineProps) {
   const [scoreOp, setScoreOp] = useState<">" | "<" | "=">(">");
   const [scoreValue, setScoreValue] = useState("8");
   const [topStudents, setTopStudents] = useState<
@@ -21,7 +26,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
   const [topTeachers, setTopTeachers] = useState<
     { name: string; subject: string; rating: number; classes: string[] }[]
   >([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isInsightsLoading, setIsInsightsLoading] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -32,7 +37,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
       params.set("scoreOp", scoreOp);
       params.set("scoreValue", scoreValue);
     }
-    setIsLoading(true);
+    setIsInsightsLoading(true);
     fetch(apiUrl(`/api/insights?${params.toString()}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     })
@@ -46,7 +51,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
         setTopTeachers(Array.isArray(data.topTeachers) ? data.topTeachers : []);
       })
       .finally(() => {
-        if (isActive) setIsLoading(false);
+        if (isActive) setIsInsightsLoading(false);
       });
     return () => {
       isActive = false;
@@ -90,7 +95,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
       <div className={styles.listLayout}>
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Top Rated Students (AI)</div>
-          {isLoading ? (
+          {isLoading || isInsightsLoading ? (
             <div className={styles.empty}>Loading insights...</div>
           ) : topStudents.length === 0 ? (
             <div className={styles.empty}>No students for this class.</div>
@@ -123,7 +128,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
 
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Students at Risk</div>
-          {isLoading ? (
+          {isLoading || isInsightsLoading ? (
             <div className={styles.empty}>Loading insights...</div>
           ) : atRiskStudents.length === 0 ? (
             <div className={styles.empty}>No at-risk students right now.</div>
@@ -156,7 +161,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
 
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Top Rated Teachers (Students)</div>
-          {isLoading ? (
+          {isLoading || isInsightsLoading ? (
             <div className={styles.empty}>Loading insights...</div>
           ) : topTeachers.length === 0 ? (
             <div className={styles.empty}>No teachers for this class.</div>
