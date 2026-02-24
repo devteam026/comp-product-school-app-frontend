@@ -15,21 +15,25 @@ export default function StudentProfileModal({
   onClose,
 }: StudentProfileModalProps) {
   const [photoUrl, setPhotoUrl] = useState<string>("");
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const loadPhoto = async () => {
+    setPhotoLoading(true);
     const token = window.localStorage.getItem("authToken");
     const response = await fetch(apiUrl(`/api/students/${student.id}/photo-url`), {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
-    if (!response.ok) return;
-    const data = await response.json().catch(() => null);
-    if (data?.url) {
-      setPhotoUrl(data.url);
-    } else {
-      setPhotoUrl("");
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      if (data?.url) {
+        setPhotoUrl(data.url);
+      } else {
+        setPhotoUrl("");
+      }
     }
+    setPhotoLoading(false);
   };
 
   useEffect(() => {
@@ -110,18 +114,22 @@ export default function StudentProfileModal({
         <div className={styles.modalBody}>
           <div className={styles.profileSection}>
             <div className={styles.sectionTitle}>Profile Photo</div>
-            <div className={styles.profilePhotoRow}>
-              {photoUrl ? (
-                <img
-                  className={styles.profilePhoto}
-                  src={photoUrl}
-                  alt={`${student.name} profile`}
-                />
-              ) : (
-                <div className={styles.profilePhotoPlaceholder}>No photo</div>
-              )}
-              <div>
-                <label className={styles.inlineButton}>
+            <div className={styles.photoCard}>
+              <div className={styles.photoFrame}>
+                {photoUrl ? (
+                  <img
+                    className={styles.profilePhoto}
+                    src={photoUrl}
+                    alt={`${student.name} profile`}
+                  />
+                ) : photoLoading ? (
+                  <div className={styles.photoSkeleton} />
+                ) : (
+                  <div className={styles.profilePhotoPlaceholder}>No photo</div>
+                )}
+              </div>
+              <div className={styles.photoActions}>
+                <label className={styles.uploadButton}>
                   {isUploading ? "Uploading..." : "Upload Photo"}
                   <input
                     type="file"

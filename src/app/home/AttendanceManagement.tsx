@@ -355,7 +355,12 @@ export default function AttendanceManagement({
                   const status: Status = attendance[student.id] ?? "Present";
                   return (
                     <tr key={student.id}>
-                      <td>{student.name}</td>
+                      <td
+                        className={styles.rowClickable}
+                        onClick={() => setSelectedStudent(student)}
+                      >
+                        {student.name}
+                      </td>
                       <td>{student.classCode}</td>
                       <td>{student.rollNumber || "-"}</td>
                       <td>

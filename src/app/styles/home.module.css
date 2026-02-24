@@ -501,23 +501,97 @@
 }
 
 .profilePhoto {
-  width: 120px;
-  height: 120px;
-  border-radius: 16px;
+  width: 140px;
+  height: 140px;
+  border-radius: 18px;
   object-fit: cover;
   border: 1px solid #e2e8f0;
 }
 
 .profilePhotoPlaceholder {
-  width: 120px;
-  height: 120px;
-  border-radius: 16px;
+  width: 140px;
+  height: 140px;
+  border-radius: 18px;
   border: 1px dashed #cbd5f5;
   display: grid;
   place-items: center;
   color: #64748b;
   font-size: 12px;
   background: #f8fafc;
+}
+
+.photoSkeleton {
+  width: 140px;
+  height: 140px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+.photoCard {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  align-items: center;
+}
+
+.photoFrame {
+  width: 160px;
+  height: 160px;
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: grid;
+  place-items: center;
+  justify-items: center;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+  margin-top: -6px;
+}
+
+.photoActions {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  margin-top: 0;
+}
+
+.uploadButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #0f172a;
+  color: #ffffff;
+  cursor: pointer;
+  width: fit-content;
+}
+
+@media (max-width: 700px) {
+  .photoCard {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+}
+
+@media (min-width: 701px) {
+  .photoCard {
+    justify-items: center;
+    align-content: start;
+    margin-top: -8px;
+  }
+
+  .photoFrame {
+    margin-top: 0;
+  }
+
+  .photoActions {
+    margin-top: -6px;
+  }
 }
 
 .error {

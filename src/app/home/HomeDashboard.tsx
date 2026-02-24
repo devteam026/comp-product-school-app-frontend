@@ -7,7 +7,7 @@ import type { Student } from "./data";
 type HomeDashboardProps = {
   students: Student[];
   dashboardData?: {
-    attendanceToday?: { present: number; absent: number };
+    attendanceToday?: { present: number; absent: number; notRecorded?: number };
     feeStats?: { paid: number; unpaid: number; free: number };
     dailyAttendance?: { day: string; present: number; absent: number }[];
     classAttendance?: { classCode: string; present: number; absent: number }[];
@@ -26,7 +26,11 @@ export default function HomeDashboard({
   const femaleCount = students.filter(
     (student) => student.gender === "Female"
   ).length;
-  const attendanceToday = dashboardData?.attendanceToday ?? { present: 0, absent: 0 };
+  const attendanceToday = dashboardData?.attendanceToday ?? {
+    present: 0,
+    absent: 0,
+    notRecorded: 0,
+  };
   const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, free: 0 };
   const dailyAttendance = dashboardData?.dailyAttendance ?? [];
   const classStudentCounts = dashboardData?.classStudentCounts ?? [];
@@ -40,11 +44,13 @@ export default function HomeDashboard({
     y: number;
     label: string;
   } | null>(null);
-  const classPie = classStudentCounts.map((item) => {
+  const classPie = classStudentCounts.map((item, index, arr) => {
     const count = Number(item.present ?? 0);
-    const percent = totalStudentsByClass === 0 ? 0 : (count / totalStudentsByClass) * 100;
-    const start = runningPercent;
-    const end = runningPercent + percent;
+    const percent =
+      totalStudentsByClass === 0 ? 0 : (count / totalStudentsByClass) * 100;
+    const start = arr.length === 1 && totalStudentsByClass > 0 ? 0 : runningPercent;
+    const end =
+      arr.length === 1 && totalStudentsByClass > 0 ? 100 : runningPercent + percent;
     runningPercent = end;
     return {
       ...item,
@@ -137,6 +143,7 @@ export default function HomeDashboard({
           <div className={styles.metricSplit}>
             <span>Present: {attendanceToday.present}</span>
             <span>Absent: {attendanceToday.absent}</span>
+            <span>Not Recorded: {attendanceToday.notRecorded ?? 0}</span>
           </div>
           <div className={styles.metricBar}>
             <span
@@ -266,8 +273,29 @@ export default function HomeDashboard({
                 >
                 {pieSlices.length === 0 ? (
                   <circle cx="50" cy="50" r="48" fill="#e2e8f0" />
+                ) : classPie.length === 1 && totalStudentsByClass > 0 ? (
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="50"
+                    fill={pieSlices[0]?.color ?? "#2563eb"}
+                    className={styles.pieSlice}
+                    onMouseMove={(event) => {
+                      const rect = (
+                        event.currentTarget.ownerSVGElement as SVGSVGElement
+                      ).getBoundingClientRect();
+                      setTooltip({
+                        x: event.clientX - rect.left,
+                        y: event.clientY - rect.top,
+                        label: `Class ${classPie[0].classCode}: ${classPie[0].present} students`,
+                      });
+                    }}
+                  />
                 ) : (
                   pieSlices.map((slice) => {
+                    if (slice.endDeg - slice.startDeg <= 0.01) {
+                      return null;
+                    }
                     const largeArc = slice.endDeg - slice.startDeg > 180 ? 1 : 0;
                     const startRad = (Math.PI / 180) * (slice.startDeg - 90);
                     const endRad = (Math.PI / 180) * (slice.endDeg - 90);
