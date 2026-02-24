@@ -6,6 +6,7 @@ import type { Student } from "./data";
 
 type HomeDashboardProps = {
   students: Student[];
+  role: string;
   dashboardData?: {
     attendanceToday?: { present: number; absent: number; notRecorded?: number };
     feeStats?: { paid: number; unpaid: number; free: number };
@@ -18,6 +19,7 @@ type HomeDashboardProps = {
 
 export default function HomeDashboard({
   students,
+  role,
   dashboardData,
   isLoading,
 }: HomeDashboardProps) {
@@ -32,6 +34,7 @@ export default function HomeDashboard({
     notRecorded: 0,
   };
   const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, free: 0 };
+  const canSeeFees = role === "admin" || role === "accountant";
   const dailyAttendance = dashboardData?.dailyAttendance ?? [];
   const classStudentCounts = dashboardData?.classStudentCounts ?? [];
   const totalStudentsByClass = classStudentCounts.reduce(
@@ -169,47 +172,49 @@ export default function HomeDashboard({
           </div>
         </article>
 
-        <article className={styles.metricCard}>
-          <h2 className={styles.metricTitle}>Fees This Month</h2>
-          <p className={styles.metricValue}>{feeStats.paid}</p>
-          <div className={styles.metricSplit}>
-            <span>Paid: {feeStats.paid}</span>
-            <span>Unpaid: {feeStats.unpaid}</span>
-            <span>Free: {feeStats.free}</span>
-          </div>
-          <div className={styles.metricBar}>
-            <span
-              className={styles.metricFill}
-              style={{
-                width: `${
-                  (feeStats.paid /
-                    (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                  100
-                }%`,
-              }}
-            />
-            <span
-              className={styles.metricFillAlt}
-              style={{
-                width: `${
-                  (feeStats.unpaid /
-                    (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                  100
-                }%`,
-              }}
-            />
-            <span
-              className={styles.metricFillMuted}
-              style={{
-                width: `${
-                  (feeStats.free /
-                    (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                  100
-                }%`,
-              }}
-            />
-          </div>
-        </article>
+        {canSeeFees ? (
+          <article className={styles.metricCard}>
+            <h2 className={styles.metricTitle}>Fees This Month</h2>
+            <p className={styles.metricValue}>{feeStats.paid}</p>
+            <div className={styles.metricSplit}>
+              <span>Paid: {feeStats.paid}</span>
+              <span>Unpaid: {feeStats.unpaid}</span>
+              <span>Free: {feeStats.free}</span>
+            </div>
+            <div className={styles.metricBar}>
+              <span
+                className={styles.metricFill}
+                style={{
+                  width: `${
+                    (feeStats.paid /
+                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
+                    100
+                  }%`,
+                }}
+              />
+              <span
+                className={styles.metricFillAlt}
+                style={{
+                  width: `${
+                    (feeStats.unpaid /
+                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
+                    100
+                  }%`,
+                }}
+              />
+              <span
+                className={styles.metricFillMuted}
+                style={{
+                  width: `${
+                    (feeStats.free /
+                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
+                    100
+                  }%`,
+                }}
+              />
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <section className={styles.chartGrid}>

@@ -47,6 +47,12 @@ export default function HomeShell({
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
 
   const role = displayRole.toLowerCase();
+  const navItems = useMemo(() => {
+    if (role === "teacher") {
+      return menuItems.filter((item) => item !== "Fee Management");
+    }
+    return menuItems;
+  }, [role]);
   const [adminClassOptions, setAdminClassOptions] = useState<string[]>([]);
   const [isAdminClassesLoading, setIsAdminClassesLoading] = useState(false);
   const [teacherOptions, setTeacherOptions] = useState<string[]>([]);
@@ -108,6 +114,11 @@ export default function HomeShell({
 
   const showNoClassNotice =
     role === "teacher" && !isTeacherClassesLoading && teacherOptions.length === 0;
+
+  useEffect(() => {
+    if (navItems.includes(activeItem)) return;
+    setActiveItem(navItems[0] ?? "Home");
+  }, [navItems, activeItem]);
 
   const subtitleMap: Record<MenuItem, string> = {
     Home: "School overview for the day and month.",
@@ -225,7 +236,7 @@ export default function HomeShell({
           </div>
 
           <nav className={styles.nav}>
-            {menuItems.map((item) => (
+            {navItems.map((item) => (
               <button
                 key={item}
                 className={`${styles.navItem} ${
@@ -309,6 +320,7 @@ export default function HomeShell({
           {activeItem === "Home" ? (
             <HomeDashboard
               students={visibleStudents}
+              role={role}
               dashboardData={dashboardData}
               isLoading={isDashboardLoading}
             />
