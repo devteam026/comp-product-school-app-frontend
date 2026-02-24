@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
+import { apiUrl } from "../../lib/api";
 
 type StudentProfileModalProps = {
   student: Student;
@@ -12,6 +14,85 @@ export default function StudentProfileModal({
   student,
   onClose,
 }: StudentProfileModalProps) {
+  const [photoUrl, setPhotoUrl] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const loadPhoto = async () => {
+    const token = window.localStorage.getItem("authToken");
+    const response = await fetch(apiUrl(`/api/students/${student.id}/photo-url`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok) return;
+    const data = await response.json().catch(() => null);
+    if (data?.url) {
+      setPhotoUrl(data.url);
+    } else {
+      setPhotoUrl("");
+    }
+  };
+
+  useEffect(() => {
+    loadPhoto();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.id]);
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const uploadRequest = await fetch(
+        apiUrl(
+          `/api/students/${student.id}/photo-upload?contentType=${encodeURIComponent(
+            file.type
+          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
+        ),
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
+      if (!uploadRequest.ok) {
+        const err = await uploadRequest.json().catch(() => ({}));
+        throw new Error(err?.error ?? "Unable to start upload");
+      }
+      const { uploadUrl, objectKey } = await uploadRequest.json();
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const updateResponse = await fetch(apiUrl(`/api/students/${student.id}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          ...student,
+          profilePhotoKey: objectKey,
+        }),
+      });
+      if (!updateResponse.ok) {
+        throw new Error("Failed to save photo reference");
+      }
+      await loadPhoto();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setUploadError(message);
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
+    }
+  };
+
   return (
     <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
       <div className={styles.modalCard}>
@@ -27,6 +108,35 @@ export default function StudentProfileModal({
           </button>
         </div>
         <div className={styles.modalBody}>
+          <div className={styles.profileSection}>
+            <div className={styles.sectionTitle}>Profile Photo</div>
+            <div className={styles.profilePhotoRow}>
+              {photoUrl ? (
+                <img
+                  className={styles.profilePhoto}
+                  src={photoUrl}
+                  alt={`${student.name} profile`}
+                />
+              ) : (
+                <div className={styles.profilePhotoPlaceholder}>No photo</div>
+              )}
+              <div>
+                <label className={styles.inlineButton}>
+                  {isUploading ? "Uploading..." : "Upload Photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    disabled={isUploading}
+                    hidden
+                  />
+                </label>
+                {uploadError ? (
+                  <div className={styles.error}>{uploadError}</div>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <div className={styles.profileSection}>
             <div className={styles.sectionTitle}>Student Details</div>
             <div className={styles.profileGrid}>

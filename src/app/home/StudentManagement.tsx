@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
+import { apiUrl } from "../../lib/api";
 
 const tabs = ["Add Student", "List Students"] as const;
 const pageSizeOptions = [10, 25, 50] as const;
@@ -107,6 +108,10 @@ export default function StudentManagement({
   const [parentPhone, setParentPhone] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [parentOccupation, setParentOccupation] = useState("");
+  const [profilePhotoKey, setProfilePhotoKey] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
@@ -201,6 +206,7 @@ export default function StudentManagement({
       parentOccupation: parentOccupation.trim(),
       status: "Active",
       history: ["Student record created"],
+      profilePhotoKey: profilePhotoKey ?? undefined,
     };
 
     onAddStudent(newStudent);
@@ -217,7 +223,52 @@ export default function StudentManagement({
     setParentPhone("");
     setParentEmail("");
     setParentOccupation("");
+    setProfilePhotoKey(null);
+    setPhotoPreview(null);
+    setPhotoError(null);
     setActiveTab("List Students");
+  };
+
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhotoError(null);
+    setPhotoUploading(true);
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const uploadRequest = await fetch(
+        apiUrl(
+          `/api/students/photo-upload?contentType=${encodeURIComponent(
+            file.type
+          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
+        ),
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
+      if (!uploadRequest.ok) {
+        const err = await uploadRequest.json().catch(() => ({}));
+        throw new Error(err?.error ?? "Unable to start upload");
+      }
+      const { uploadUrl, objectKey } = await uploadRequest.json();
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed");
+      }
+      setProfilePhotoKey(objectKey);
+      setPhotoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setPhotoError(message);
+    } finally {
+      setPhotoUploading(false);
+      event.target.value = "";
+    }
   };
 
   const handleStartEdit = (student: Student) => {
@@ -348,6 +399,26 @@ export default function StudentManagement({
           <div className={styles.sectionTitle}>Student Details</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
+              Profile Photo (Optional)
+              <input
+                className={styles.input}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                disabled={photoUploading}
+              />
+            </label>
+            <div className={styles.profilePhotoPlaceholder}>
+              {photoPreview ? (
+                <img className={styles.profilePhoto} src={photoPreview} alt="Preview" />
+              ) : (
+                <span>No photo</span>
+              )}
+            </div>
+          </div>
+          {photoError ? <div className={styles.error}>{photoError}</div> : null}
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
               Student Name
               <input
                 className={styles.input}
@@ -366,6 +437,7 @@ export default function StudentManagement({
                 onChange={(event) =>
                   setGender(event.target.value as "Male" | "Female")
                 }
+                required
               >
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -379,6 +451,7 @@ export default function StudentManagement({
                 type="date"
                 value={dateOfBirth}
                 onChange={(event) => setDateOfBirth(event.target.value)}
+                required
               />
             </label>
 
@@ -399,6 +472,7 @@ export default function StudentManagement({
                 type="text"
                 value={rollNumber}
                 onChange={(event) => setRollNumber(event.target.value)}
+                required
               />
             </label>
 
@@ -409,6 +483,7 @@ export default function StudentManagement({
                 type="text"
                 value={address}
                 onChange={(event) => setAddress(event.target.value)}
+                required
               />
             </label>
           </div>
@@ -423,6 +498,7 @@ export default function StudentManagement({
                 value={derivedGrade}
                 onChange={(event) => setGrade(event.target.value)}
                 disabled={hasClassLock}
+                required={!hasClassLock}
               />
             </label>
 
@@ -434,6 +510,7 @@ export default function StudentManagement({
                 value={derivedSection}
                 onChange={(event) => setSection(event.target.value)}
                 disabled={hasClassLock}
+                required={!hasClassLock}
               />
             </label>
           </div>
@@ -447,6 +524,7 @@ export default function StudentManagement({
                 type="text"
                 value={parentName}
                 onChange={(event) => setParentName(event.target.value)}
+                required
               />
             </label>
 
@@ -456,6 +534,7 @@ export default function StudentManagement({
                 className={styles.input}
                 value={parentRelation}
                 onChange={(event) => setParentRelation(event.target.value)}
+                required
               >
                 <option value="Parent">Parent</option>
                 <option value="Mother">Mother</option>
@@ -471,6 +550,7 @@ export default function StudentManagement({
                 type="tel"
                 value={parentPhone}
                 onChange={(event) => setParentPhone(event.target.value)}
+                required
               />
             </label>
 
@@ -491,6 +571,7 @@ export default function StudentManagement({
                 type="text"
                 value={parentOccupation}
                 onChange={(event) => setParentOccupation(event.target.value)}
+                required
               />
             </label>
           </div>

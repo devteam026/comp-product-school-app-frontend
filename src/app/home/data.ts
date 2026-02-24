@@ -17,6 +17,7 @@ export type Student = {
   status: "Active" | "Inactive";
   history: string[];
   feeType: "Paid" | "Free";
+  profilePhotoKey?: string;
 };
 
 export const seedStudents: Student[] = [

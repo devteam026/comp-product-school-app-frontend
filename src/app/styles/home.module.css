@@ -493,6 +493,39 @@
   letter-spacing: 0;
 }
 
+.profilePhotoRow {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.profilePhoto {
+  width: 120px;
+  height: 120px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+}
+
+.profilePhotoPlaceholder {
+  width: 120px;
+  height: 120px;
+  border-radius: 16px;
+  border: 1px dashed #cbd5f5;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 12px;
+  background: #f8fafc;
+}
+
+.error {
+  margin-top: 6px;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
 @media (max-width: 700px) {
   .modalBackdrop {
     padding: 10px;

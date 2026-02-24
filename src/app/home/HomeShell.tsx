@@ -141,24 +141,25 @@ export default function HomeShell({
     const url = exists
       ? apiUrl(`/api/students/${student.id}`)
       : apiUrl("/api/students");
-    const payload = {
-      ...(exists ? { id: student.id } : {}),
-      name: student.name,
-      grade: student.grade,
-      section: student.section,
-      gender: student.gender,
-      dateOfBirth: student.dateOfBirth,
-      admissionNumber: student.admissionNumber,
-      rollNumber: student.rollNumber,
-      address: student.address,
-      parentName: student.parentName,
-      parentRelation: student.parentRelation,
-      parentPhone: student.parentPhone,
-      parentEmail: student.parentEmail,
-      parentOccupation: student.parentOccupation,
-      status: student.status,
-      feeType: student.feeType,
-    };
+      const payload = {
+        ...(exists ? { id: student.id } : {}),
+        name: student.name,
+        grade: student.grade,
+        section: student.section,
+        gender: student.gender,
+        dateOfBirth: student.dateOfBirth,
+        admissionNumber: student.admissionNumber,
+        rollNumber: student.rollNumber,
+        address: student.address,
+        parentName: student.parentName,
+        parentRelation: student.parentRelation,
+        parentPhone: student.parentPhone,
+        parentEmail: student.parentEmail,
+        parentOccupation: student.parentOccupation,
+        status: student.status,
+        feeType: student.feeType,
+        profilePhotoKey: student.profilePhotoKey,
+      };
     const response = await fetch(url, {
       method: exists ? "PUT" : "POST",
       headers: {
