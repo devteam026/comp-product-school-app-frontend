@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../styles/login.module.css";
+import { apiUrl } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function LoginPage() {
   useEffect(() => {
     let isActive = true;
     setIsInfoLoading(true);
-    fetch("http://localhost:8081/api/school")
+    fetch(apiUrl("/api/school"))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isActive || !data) return;
@@ -59,7 +60,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8081/api/auth/login", {
+      const response = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, role, classCode: "" }),
@@ -79,7 +80,7 @@ export default function LoginPage() {
       if (role === "teacher" && data?.user?.username) {
         const token = data?.token as string | undefined;
         const classResponse = await fetch(
-          `http://localhost:8081/api/classes/teacher/${encodeURIComponent(data.user.username)}`,
+          apiUrl(`/api/classes/teacher/${encodeURIComponent(data.user.username)}`),
           {
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           }

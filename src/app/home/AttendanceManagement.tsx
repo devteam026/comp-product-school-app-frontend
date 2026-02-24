@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
+import { apiUrl } from "../../lib/api";
 
 type AttendanceManagementProps = {
   students: Student[];
@@ -69,11 +70,50 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
     setIsSaving(true);
     setSaveMessage(null);
 
-    // Demo save: replace with real API call
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const records = students.map((student) => ({
+        studentId: student.id,
+        status: attendance[student.id] ?? "Present",
+      }));
+      const response = await fetch(apiUrl("/api/attendance"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          date: attendanceDate,
+          records,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to save attendance");
+      }
+      const data = await response.json().catch(() => null);
+      setSaveMessage(
+        data?.ok ? "Attendance saved successfully." : "Attendance saved."
+      );
+    } catch {
+      setSaveMessage("Unable to save attendance. Try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-    setIsSaving(false);
-    setSaveMessage("Attendance saved successfully.");
+  const loadAttendance = async (date: string) => {
+    const token = window.localStorage.getItem("authToken");
+    const response = await fetch(apiUrl(`/api/attendance?date=${date}`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok) return;
+    const data = await response.json().catch(() => null);
+    if (!data?.records) return;
+    const map: Record<string, Status> = {};
+    data.records.forEach((record: { studentId: string; status: Status }) => {
+      map[record.studentId] = record.status;
+    });
+    setAttendance(map);
   };
 
   const filteredStudents = useMemo(() => {
@@ -216,7 +256,11 @@ export default function AttendanceManagement({ students }: AttendanceManagementP
                   className={styles.input}
                   type="date"
                   value={listDate}
-                  onChange={(event) => setListDate(event.target.value)}
+                  onChange={(event) => {
+                    const nextDate = event.target.value;
+                    setListDate(nextDate);
+                    loadAttendance(nextDate);
+                  }}
                 />
               </label>
               <div className={styles.inlineActions}>

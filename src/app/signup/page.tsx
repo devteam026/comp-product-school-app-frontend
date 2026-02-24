@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../styles/login.module.css";
+import { apiUrl } from "../../lib/api";
 
 const roles = [
   { value: "student", label: "👨‍🎓 Student" },
@@ -27,7 +28,7 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8081/api/auth/register", {
+      const response = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ displayName, username, role, password }),

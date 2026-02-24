@@ -1,49 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "../styles/home.module.css";
+import { apiUrl } from "../../lib/api";
 
 type AIEngineProps = {
   classCode?: string;
   onStudentClick?: (name: string) => void;
 };
 
-const topStudents = [
-  { name: "Ava Wilson", classCode: "5A", score: 9.8 },
-  { name: "Noah Smith", classCode: "6B", score: 9.4 },
-  { name: "Mia Patel", classCode: "7A", score: 9.6 },
-  { name: "Liam Carter", classCode: "8C", score: 9.2 },
-  { name: "Sophia Kim", classCode: "9B", score: 9.5 },
-];
-
-const topTeachers = [
-  { name: "Mr. Adams", subject: "Mathematics", rating: 9.2, classes: ["5A"] },
-  { name: "Ms. Rivera", subject: "Science", rating: 9.0, classes: ["6B"] },
-  { name: "Mrs. Lee", subject: "English", rating: 8.8, classes: ["7A"] },
-  { name: "Mr. Singh", subject: "History", rating: 8.7, classes: ["8C", "9B"] },
-];
-
 export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
   const [scoreOp, setScoreOp] = useState<">" | "<" | "=">(">");
   const [scoreValue, setScoreValue] = useState("8");
+  const [topStudents, setTopStudents] = useState<
+    { name: string; classCode: string; score: number }[]
+  >([]);
+  const [atRiskStudents, setAtRiskStudents] = useState<
+    { name: string; classCode: string; score: number }[]
+  >([]);
+  const [topTeachers, setTopTeachers] = useState<
+    { name: string; subject: string; rating: number; classes: string[] }[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const filteredStudents = classCode
-    ? topStudents.filter((student) => student.classCode === classCode)
-    : topStudents;
-
-  const scoreNumber = Number(scoreValue);
-  const filteredByScore = filteredStudents.filter((student) => {
-    if (Number.isNaN(scoreNumber)) return true;
-    if (scoreOp === ">") return student.score > scoreNumber;
-    if (scoreOp === "<") return student.score < scoreNumber;
-    return student.score === scoreNumber;
-  });
-
-  const filteredTeachers = classCode
-    ? topTeachers.filter((teacher) => teacher.classes.includes(classCode))
-    : topTeachers;
-
-  const atRiskStudents = filteredStudents.filter((student) => student.score < 8.0);
+  useEffect(() => {
+    let isActive = true;
+    const token = window.localStorage.getItem("authToken");
+    const params = new URLSearchParams();
+    if (classCode) params.set("classCode", classCode);
+    if (scoreValue) {
+      params.set("scoreOp", scoreOp);
+      params.set("scoreValue", scoreValue);
+    }
+    setIsLoading(true);
+    fetch(apiUrl(`/api/insights?${params.toString()}`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isActive || !data) return;
+        setTopStudents(Array.isArray(data.topStudents) ? data.topStudents : []);
+        setAtRiskStudents(
+          Array.isArray(data.atRiskStudents) ? data.atRiskStudents : []
+        );
+        setTopTeachers(Array.isArray(data.topTeachers) ? data.topTeachers : []);
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [classCode, scoreOp, scoreValue]);
 
   return (
     <div className={styles.form}>
@@ -82,7 +90,9 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
       <div className={styles.listLayout}>
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Top Rated Students (AI)</div>
-          {filteredByScore.length === 0 ? (
+          {isLoading ? (
+            <div className={styles.empty}>Loading insights...</div>
+          ) : topStudents.length === 0 ? (
             <div className={styles.empty}>No students for this class.</div>
           ) : (
             <table className={styles.table}>
@@ -94,7 +104,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
                 </tr>
               </thead>
               <tbody>
-                {filteredByScore.map((student) => (
+                {topStudents.map((student) => (
                   <tr key={student.name}>
                     <td
                       className={styles.rowClickable}
@@ -113,7 +123,9 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
 
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Students at Risk</div>
-          {atRiskStudents.length === 0 ? (
+          {isLoading ? (
+            <div className={styles.empty}>Loading insights...</div>
+          ) : atRiskStudents.length === 0 ? (
             <div className={styles.empty}>No at-risk students right now.</div>
           ) : (
             <table className={styles.table}>
@@ -144,7 +156,9 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
 
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Top Rated Teachers (Students)</div>
-          {filteredTeachers.length === 0 ? (
+          {isLoading ? (
+            <div className={styles.empty}>Loading insights...</div>
+          ) : topTeachers.length === 0 ? (
             <div className={styles.empty}>No teachers for this class.</div>
           ) : (
             <table className={styles.table}>
@@ -156,7 +170,7 @@ export default function AIEngine({ classCode, onStudentClick }: AIEngineProps) {
                 </tr>
               </thead>
               <tbody>
-                {filteredTeachers.map((teacher) => (
+                {topTeachers.map((teacher) => (
                   <tr key={teacher.name}>
                     <td>{teacher.name}</td>
                     <td>{teacher.subject}</td>

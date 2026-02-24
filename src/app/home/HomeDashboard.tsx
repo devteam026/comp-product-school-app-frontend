@@ -3,38 +3,25 @@
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
 
-const attendanceToday = {
-  present: 1104,
-  absent: 136,
-};
-
-const feeStats = {
-  paid: 890,
-  unpaid: 350,
-  free: 120,
-};
-
-const dailyAttendance = [
-  { day: "Mon", present: 1080, absent: 160 },
-  { day: "Tue", present: 1120, absent: 120 },
-  { day: "Wed", present: 1095, absent: 145 },
-  { day: "Thu", present: 1110, absent: 130 },
-  { day: "Fri", present: 1104, absent: 136 },
-];
-
-
-const maxDaily = Math.max(...dailyAttendance.map((d) => d.present + d.absent));
-
 type HomeDashboardProps = {
   students: Student[];
+  dashboardData?: {
+    attendanceToday?: { present: number; absent: number };
+    feeStats?: { paid: number; unpaid: number; free: number };
+    dailyAttendance?: { day: string; present: number; absent: number }[];
+  } | null;
 };
 
-export default function HomeDashboard({ students }: HomeDashboardProps) {
+export default function HomeDashboard({ students, dashboardData }: HomeDashboardProps) {
   const totalStudents = students.length;
   const maleCount = students.filter((student) => student.gender === "Male").length;
   const femaleCount = students.filter(
     (student) => student.gender === "Female"
   ).length;
+  const attendanceToday = dashboardData?.attendanceToday ?? { present: 0, absent: 0 };
+  const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, free: 0 };
+  const dailyAttendance = dashboardData?.dailyAttendance ?? [];
+  const maxDailyValue = Math.max(...dailyAttendance.map((d) => d.present + d.absent), 1);
 
   return (
     <div className={styles.dashboard}>
@@ -79,7 +66,7 @@ export default function HomeDashboard({ students }: HomeDashboardProps) {
               style={{
                 width: `${
                   (attendanceToday.present /
-                    (attendanceToday.present + attendanceToday.absent)) *
+                    Math.max(attendanceToday.present + attendanceToday.absent, 1)) *
                   100
                 }%`,
               }}
@@ -89,7 +76,7 @@ export default function HomeDashboard({ students }: HomeDashboardProps) {
               style={{
                 width: `${
                   (attendanceToday.absent /
-                    (attendanceToday.present + attendanceToday.absent)) *
+                    Math.max(attendanceToday.present + attendanceToday.absent, 1)) *
                   100
                 }%`,
               }}
@@ -166,11 +153,11 @@ export default function HomeDashboard({ students }: HomeDashboardProps) {
                   <div className={styles.chartStack}>
                     <span
                       className={styles.chartBarPrimary}
-                      style={{ height: `${(day.present / maxDaily) * 100}%` }}
+                      style={{ height: `${(day.present / maxDailyValue) * 100}%` }}
                     />
                     <span
                       className={styles.chartBarSecondary}
-                      style={{ height: `${(day.absent / maxDaily) * 100}%` }}
+                      style={{ height: `${(day.absent / maxDailyValue) * 100}%` }}
                     />
                   </div>
                   <span className={styles.chartLabel}>{day.day}</span>

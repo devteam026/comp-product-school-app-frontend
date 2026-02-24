@@ -8,8 +8,9 @@ import AttendanceManagement from "./AttendanceManagement";
 import FeeManagement from "./FeeManagement";
 import AIEngine from "./AIEngine";
 import HomeDashboard from "./HomeDashboard";
-import { filterStudents, seedStudents, type Student } from "./data";
+import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
+import { apiUrl } from "../../lib/api";
 
 const menuItems = [
   "Home",
@@ -33,8 +34,13 @@ export default function HomeShell({
   classCode,
 }: HomeShellProps) {
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
-  const [students, setStudents] = useState<Student[]>(seedStudents);
+  const [students, setStudents] = useState<Student[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
+  const [dashboardData, setDashboardData] = useState<{
+    attendanceToday?: { present: number; absent: number };
+    feeStats?: { paid: number; unpaid: number; free: number };
+    dailyAttendance?: { day: string; present: number; absent: number }[];
+  } | null>(null);
 
   const role = displayRole.toLowerCase();
   const [adminClassOptions, setAdminClassOptions] = useState<string[]>([]);
@@ -48,7 +54,7 @@ export default function HomeShell({
     let isActive = true;
     setIsTeacherClassesLoading(true);
     const token = window.localStorage.getItem("authToken");
-    fetch(`http://localhost:8081/api/classes/teacher/${encodeURIComponent(username)}`, {
+    fetch(apiUrl(`/api/classes/teacher/${encodeURIComponent(username)}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     })
       .then((res) => (res.ok ? res.json() : []))
@@ -75,7 +81,7 @@ export default function HomeShell({
     let isActive = true;
     setIsAdminClassesLoading(true);
     const token = window.localStorage.getItem("authToken");
-    fetch("http://localhost:8081/api/classes", {
+    fetch(apiUrl("/api/classes"), {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     })
       .then((res) => (res.ok ? res.json() : []))
@@ -107,35 +113,87 @@ export default function HomeShell({
     "AI Insights": "AI insights and top-rated lists.",
   };
 
-  const handleAddStudent = (student: Student) => {
-    setStudents((prev) => {
-      const existingIndex = prev.findIndex((item) => item.id === student.id);
-      if (existingIndex === -1) {
-        return [student, ...prev];
-      }
-      const updated = [...prev];
-      updated[existingIndex] = student;
-      return updated;
+  const fetchStudents = async (code?: string) => {
+    const token = window.localStorage.getItem("authToken");
+    const params = new URLSearchParams();
+    if (code && code !== "all") params.set("classCode", code);
+    const url = params.toString()
+      ? apiUrl(`/api/students?${params.toString()}`)
+      : apiUrl("/api/students");
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
+    if (!response.ok) return;
+    const data = (await response.json()) as Student[];
+    setStudents(Array.isArray(data) ? data : []);
+  };
+
+  const handleAddStudent = async (student: Student) => {
+    const token = window.localStorage.getItem("authToken");
+    const exists = students.some((item) => item.id === student.id);
+    const url = exists
+      ? apiUrl(`/api/students/${student.id}`)
+      : apiUrl("/api/students");
+    const payload = {
+      ...(exists ? { id: student.id } : {}),
+      name: student.name,
+      grade: student.grade,
+      section: student.section,
+      gender: student.gender,
+      dateOfBirth: student.dateOfBirth,
+      admissionNumber: student.admissionNumber,
+      rollNumber: student.rollNumber,
+      address: student.address,
+      parentName: student.parentName,
+      parentRelation: student.parentRelation,
+      parentPhone: student.parentPhone,
+      parentEmail: student.parentEmail,
+      parentOccupation: student.parentOccupation,
+      status: student.status,
+      feeType: student.feeType,
+    };
+    const response = await fetch(url, {
+      method: exists ? "PUT" : "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (response.ok) {
+      fetchStudents(activeClass);
+    }
   };
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("students");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Student[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setStudents(parsed);
-        }
-      } catch {
-        // ignore bad data
-      }
-    }
-  }, []);
+    fetchStudents(activeClass);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeClass]);
 
   useEffect(() => {
-    window.localStorage.setItem("students", JSON.stringify(students));
-  }, [students]);
+    let isActive = true;
+    const token = window.localStorage.getItem("authToken");
+    const classParam =
+      activeClass && activeClass !== "all" ? `?classCode=${activeClass}` : "";
+    fetch(apiUrl(`/api/dashboard${classParam}`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isActive || !data) return;
+        setDashboardData({
+          attendanceToday: data.attendanceToday,
+          feeStats: data.feeStats,
+          dailyAttendance: data.dailyAttendance,
+        });
+      })
+      .catch(() => {
+        // keep fallback UI data
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [activeClass]);
 
   return (
     <div className={styles.page}>
@@ -234,7 +292,7 @@ export default function HomeShell({
           ) : null}
 
           {activeItem === "Home" ? (
-            <HomeDashboard students={visibleStudents} />
+            <HomeDashboard students={visibleStudents} dashboardData={dashboardData} />
           ) : activeItem === "Student Management" ? (
             <StudentManagement
               students={visibleStudents}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
+import { apiUrl } from "../../lib/api";
 
 type FeeManagementProps = {
   students: Student[];
@@ -23,25 +24,17 @@ const tabs = ["Overview", "Record Payments", "Show Payment"] as const;
 
 type Tab = (typeof tabs)[number];
 
-const monthlyFee = 100;
-const monthlyFees = [
-  { month: "Aug", paid: 820, unpaid: 210, free: 120 },
-  { month: "Sep", paid: 860, unpaid: 180, free: 110 },
-  { month: "Oct", paid: 900, unpaid: 170, free: 105 },
-  { month: "Nov", paid: 880, unpaid: 190, free: 115 },
-  { month: "Dec", paid: 890, unpaid: 350, free: 120 },
-];
-
 function nextMonths(count: number) {
-  const months: string[] = [];
+  const months: { value: string; label: string }[] = [];
   const now = new Date();
   for (let i = 0; i < count; i += 1) {
     const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const value = date.toISOString().slice(0, 7);
     const label = date.toLocaleString("en-US", {
       month: "short",
       year: "numeric",
     });
-    months.push(label);
+    months.push({ value, label });
   }
   return months;
 }
@@ -54,7 +47,7 @@ export default function FeeManagement({ students }: FeeManagementProps) {
   );
   const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
   const [monthFilter, setMonthFilter] = useState(
-    () => new Date().toLocaleString("en-US", { month: "short", year: "numeric" })
+    () => new Date().toISOString().slice(0, 7)
   );
   const [statusFilter, setStatusFilter] = useState<"all" | "Paid" | "Unpaid">(
     "all"
@@ -76,37 +69,125 @@ export default function FeeManagement({ students }: FeeManagementProps) {
 
   const monthOptions = useMemo(() => nextMonths(6), []);
 
-  const paidTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const freeCount = students.filter((student) => student.feeType === "Free").length;
-  const maxMonthly = Math.max(
-    ...monthlyFees.map((m) => m.paid + m.unpaid + m.free)
-  );
+  const loadPayments = async (month?: string) => {
+    const token = window.localStorage.getItem("authToken");
+    const params = new URLSearchParams();
+    if (month) params.set("month", month);
+    const url = params.toString()
+      ? apiUrl(`/api/payments?${params.toString()}`)
+      : apiUrl("/api/payments");
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      id: string;
+      studentId: string;
+      amount: string;
+      months: string[];
+      method: Payment["method"];
+      note: string;
+      date: string;
+    }[];
+    const parsed = Array.isArray(data)
+      ? data.map((item) => ({
+          ...item,
+          amount: Number(item.amount),
+        }))
+      : [];
+    setPayments(parsed);
+  };
+
+  const loadSummary = async (month?: string) => {
+    const token = window.localStorage.getItem("authToken");
+    const params = new URLSearchParams();
+    if (month) params.set("month", month);
+    const url = params.toString()
+      ? apiUrl(`/api/fees/summary?${params.toString()}`)
+      : apiUrl("/api/fees/summary");
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok) return;
+    const data = await response.json().catch(() => null);
+    if (!data) return;
+    setSummary({
+      monthlyFee: Number(data.monthlyFee ?? 0),
+      paidCount: Number(data.paidCount ?? 0),
+      unpaidCount: Number(data.unpaidCount ?? 0),
+      freeCount: Number(data.freeCount ?? 0),
+      paidTotal: Number(data.paidTotal ?? 0),
+      unpaidStudentIds: Array.isArray(data.unpaidStudentIds)
+        ? data.unpaidStudentIds
+        : [],
+    });
+  };
+
+  useEffect(() => {
+    loadPayments(monthFilter);
+    loadSummary(monthFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthFilter]);
+
+  const [summary, setSummary] = useState<{
+    monthlyFee: number;
+    paidCount: number;
+    unpaidCount: number;
+    freeCount: number;
+    paidTotal: number;
+    unpaidStudentIds: string[];
+  }>({
+    monthlyFee: 0,
+    paidCount: 0,
+    unpaidCount: 0,
+    freeCount: 0,
+    paidTotal: 0,
+    unpaidStudentIds: [],
+  });
 
   const handleRecordPayment = () => {
     if (!selectedStudent || !selectedMonth) return;
     const parsedAmount = Number(amount);
     if (Number.isNaN(parsedAmount) || parsedAmount <= 0) return;
 
-    const monthLabel = new Date(`${selectedMonth}-01`).toLocaleString("en-US", {
-      month: "short",
-      year: "numeric",
-    });
-
     const payment: Payment = {
       id: crypto.randomUUID(),
       studentId: selectedStudent,
       amount: parsedAmount,
-      months: [monthLabel],
+      months: [selectedMonth],
       method,
       note,
       date: paymentDate,
     };
 
-    setPayments((prev) => [payment, ...prev]);
-    setSelectedMonth(new Date().toISOString().slice(0, 7));
-    setAmount("100");
-    setNote("");
-    setPaymentDate(new Date().toISOString().slice(0, 10));
+    const savePayment = async () => {
+      const token = window.localStorage.getItem("authToken");
+      const response = await fetch(apiUrl("/api/payments"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          studentId: payment.studentId,
+          amount: String(payment.amount),
+          months: payment.months,
+          method: payment.method,
+          note: payment.note,
+          date: payment.date,
+        }),
+      });
+      if (response.ok) {
+        await loadPayments(monthFilter);
+        await loadSummary(monthFilter);
+        setSelectedMonth(new Date().toISOString().slice(0, 7));
+        setAmount("100");
+        setNote("");
+        setPaymentDate(new Date().toISOString().slice(0, 10));
+      }
+    };
+
+    savePayment();
   };
 
   const paidStudentIdsForMonth = useMemo(() => {
@@ -127,15 +208,28 @@ export default function FeeManagement({ students }: FeeManagementProps) {
     );
   };
 
-  const handleSendReminder = (scope: "all" | "selected") => {
+  const handleSendReminder = async (scope: "all" | "selected") => {
     if (scope === "selected" && selectedIds.length === 0) return;
-    const count =
-      scope === "all"
-        ? students.filter((student) => !paidStudentIdsForMonth.has(student.id)).length
-        : selectedIds.length;
-    setReminderMessage(
-      `Reminder queued for ${count} parent${count === 1 ? "" : "s"}.`
-    );
+    const token = window.localStorage.getItem("authToken");
+    const response = await fetch(apiUrl("/api/fees/reminders"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        scope,
+        studentIds: scope === "selected" ? selectedIds : [],
+      }),
+    });
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      setReminderMessage(
+        data?.message ?? "Reminder queued."
+      );
+    } else {
+      setReminderMessage("Unable to send reminders.");
+    }
     if (scope === "selected") {
       setSelectedIds([]);
     }
@@ -160,17 +254,17 @@ export default function FeeManagement({ students }: FeeManagementProps) {
         <div className={styles.metricGrid}>
           <div className={styles.metricCard}>
             <h3 className={styles.metricTitle}>Monthly Fee</h3>
-            <div className={styles.metricValue}>${monthlyFee}</div>
+            <div className={styles.metricValue}>${summary.monthlyFee}</div>
             <p className={styles.subtitle}>Default monthly fee for paid students.</p>
           </div>
           <div className={styles.metricCard}>
             <h3 className={styles.metricTitle}>Total Paid</h3>
-            <div className={styles.metricValue}>${paidTotal}</div>
+            <div className={styles.metricValue}>${summary.paidTotal}</div>
             <p className={styles.subtitle}>Recorded payments this session.</p>
           </div>
           <div className={styles.metricCard}>
             <h3 className={styles.metricTitle}>Free Students</h3>
-            <div className={styles.metricValue}>{freeCount}</div>
+            <div className={styles.metricValue}>{summary.freeCount}</div>
             <p className={styles.subtitle}>Monthly fee waived.</p>
           </div>
         </div>
@@ -273,7 +367,15 @@ export default function FeeManagement({ students }: FeeManagementProps) {
                   return (
                     <tr key={payment.id}>
                       <td>{student?.name ?? "-"}</td>
-                      <td>{payment.months.join(", ")}</td>
+                      <td>
+                        {payment.months
+                          .map(
+                            (value) =>
+                              monthOptions.find((opt) => opt.value === value)?.label ??
+                              value
+                          )
+                          .join(", ")}
+                      </td>
                       <td>${payment.amount}</td>
                       <td>{payment.method}</td>
                     </tr>
@@ -289,16 +391,16 @@ export default function FeeManagement({ students }: FeeManagementProps) {
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Monthly Report</div>
           <p className={styles.subtitle}>
-            Export collection vs outstanding. (Demo summary)
+            Export collection vs outstanding.
           </p>
           <div className={styles.profileGrid}>
             <div className={styles.profileField}>
               <span>Collected</span>
-              <div className={styles.profileValue}>${paidTotal}</div>
+              <div className={styles.profileValue}>${summary.paidTotal}</div>
             </div>
             <div className={styles.profileField}>
               <span>Free Students</span>
-              <div className={styles.profileValue}>{freeCount}</div>
+              <div className={styles.profileValue}>{summary.freeCount}</div>
             </div>
           </div>
         </div>
@@ -309,48 +411,12 @@ export default function FeeManagement({ students }: FeeManagementProps) {
           <div className={styles.chartHeader}>
             <div>
               <h3 className={styles.chartTitle}>Monthly Fees</h3>
-              <p className={styles.chartSubtitle}>Paid / Unpaid / Free (last 5 months)</p>
+              <p className={styles.chartSubtitle}>
+                Chart data will appear when monthly summaries are available.
+              </p>
             </div>
           </div>
-          <div className={styles.legend}>
-            <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#6366f1" }} />
-              Paid
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#0ea5e9" }} />
-              Unpaid
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#f97316" }} />
-              Free
-            </span>
-          </div>
-          <div className={styles.chartBars}>
-            {monthlyFees.map((month) => {
-              const total = month.paid + month.unpaid + month.free;
-              return (
-                <div key={month.month} className={styles.chartBarGroup}>
-                  <div className={styles.chartStack}>
-                    <span
-                      className={styles.chartBarPrimary}
-                      style={{ height: `${(month.paid / maxMonthly) * 100}%` }}
-                    />
-                    <span
-                      className={styles.chartBarSecondary}
-                      style={{ height: `${(month.unpaid / maxMonthly) * 100}%` }}
-                    />
-                    <span
-                      className={styles.chartBarMuted}
-                      style={{ height: `${(month.free / maxMonthly) * 100}%` }}
-                    />
-                  </div>
-                  <span className={styles.chartLabel}>{month.month}</span>
-                  <span className={styles.chartValue}>{total}</span>
-                </div>
-              );
-            })}
-          </div>
+          <div className={styles.empty}>No chart data yet.</div>
         </article>
       ) : null}
 
@@ -377,8 +443,8 @@ export default function FeeManagement({ students }: FeeManagementProps) {
                 onChange={(event) => setMonthFilter(event.target.value)}
               >
                 {monthOptions.map((month) => (
-                  <option key={month} value={month}>
-                    {month}
+                  <option key={month.value} value={month.value}>
+                    {month.label}
                   </option>
                 ))}
               </select>
