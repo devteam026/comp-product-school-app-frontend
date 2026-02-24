@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import styles from "../styles/home.module.css";
 import LogoutButton from "./LogoutButton";
 import StudentManagement from "./StudentManagement";
@@ -33,6 +33,8 @@ export default function HomeShell({
   username,
   classCode,
 }: HomeShellProps) {
+  const sidebarBg = process.env.NEXT_PUBLIC_SIDEBAR_BG?.trim();
+  const brandTitle = process.env.NEXT_PUBLIC_BRAND_NAME?.trim() || "School Portal";
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
   const [students, setStudents] = useState<Student[]>([]);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
@@ -224,9 +226,16 @@ export default function HomeShell({
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        <aside className={styles.sidebar}>
+        <aside
+          className={styles.sidebar}
+          style={
+            sidebarBg
+              ? ({ "--sidebar-bg": sidebarBg } as CSSProperties)
+              : undefined
+          }
+        >
           <div>
-            <div className={styles.brand}>School Portal</div>
+            <div className={styles.brand}>{brandTitle}</div>
             <div className={styles.user}>
               {displayRole} · {username}
             </div>
