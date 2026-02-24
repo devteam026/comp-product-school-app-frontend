@@ -21,7 +21,7 @@ type SortField = (typeof sortFields)[number];
 
 type StudentManagementProps = {
   students: Student[];
-  onAddStudent: (student: Student) => void;
+  onAddStudent: (student: Student) => Promise<boolean>;
   role: string;
   username: string;
   classCode?: string;
@@ -44,6 +44,7 @@ type EditState = {
   parentEmail: string;
   parentOccupation: string;
   status: "Active" | "Inactive";
+  profilePhotoKey?: string;
 };
 
 const csvHeaders = [
@@ -112,6 +113,15 @@ export default function StudentManagement({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [editPhotoUrl, setEditPhotoUrl] = useState<string | null>(null);
+  const [editPhotoLoading, setEditPhotoLoading] = useState(false);
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+  const [editPhotoUploading, setEditPhotoUploading] = useState(false);
+  const [editPhotoError, setEditPhotoError] = useState<string | null>(null);
+  const [editSaveStatus, setEditSaveStatus] = useState<
+    "idle" | "saving" | "success" | "error"
+  >("idle");
+  const [editSaveMessage, setEditSaveMessage] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
@@ -179,7 +189,7 @@ export default function StudentManagement({
     page * pageSize
   );
 
-  const handleAddStudent = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleAddStudent = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
@@ -209,7 +219,7 @@ export default function StudentManagement({
       profilePhotoKey: profilePhotoKey ?? undefined,
     };
 
-    onAddStudent(newStudent);
+    await onAddStudent(newStudent);
     setName("");
     setGrade("");
     setSection("");
@@ -288,10 +298,34 @@ export default function StudentManagement({
       parentEmail: student.parentEmail,
       parentOccupation: student.parentOccupation,
       status: student.status,
+      profilePhotoKey: student.profilePhotoKey,
     });
+    setEditPhotoPreview(null);
+    setEditPhotoUrl(null);
+    setEditPhotoError(null);
+    setEditPhotoLoading(false);
+    setEditSaveStatus("idle");
+    setEditSaveMessage(null);
+    if (student.profilePhotoKey) {
+      setEditPhotoLoading(true);
+      const token = window.localStorage.getItem("authToken");
+      fetch(apiUrl(`/api/students/${student.id}/photo-url`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.url) setEditPhotoUrl(data.url);
+        })
+        .catch(() => {
+          // ignore
+        })
+        .finally(() => {
+          setEditPhotoLoading(false);
+        });
+    }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editState) return;
     const updated: Student = {
       ...students.find((student) => student.id === editState.id)!,
@@ -302,8 +336,16 @@ export default function StudentManagement({
         "Student record updated",
       ],
     };
-    onAddStudent(updated);
-    setEditState(null);
+    setEditSaveStatus("saving");
+    setEditSaveMessage(null);
+    const ok = await onAddStudent(updated);
+    if (ok) {
+      setEditSaveStatus("success");
+      setEditSaveMessage("Student updated successfully.");
+    } else {
+      setEditSaveStatus("error");
+      setEditSaveMessage("Unable to save changes. Please try again.");
+    }
   };
 
   const handleExport = () => {
@@ -363,13 +405,55 @@ export default function StudentManagement({
         status: record.status === "Inactive" ? "Inactive" : "Active",
         history: ["Imported from CSV"],
       };
-      onAddStudent(newStudent);
+      void onAddStudent(newStudent);
     });
     event.target.value = "";
   };
 
   const handleUpsertStudent = (student: Student) => {
-    onAddStudent(student);
+    void onAddStudent(student);
+  };
+
+  const handleEditPhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !editState) return;
+    setEditPhotoError(null);
+    setEditPhotoUploading(true);
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const uploadRequest = await fetch(
+        apiUrl(
+          `/api/students/photo-upload?contentType=${encodeURIComponent(
+            file.type
+          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
+        ),
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
+      if (!uploadRequest.ok) {
+        const err = await uploadRequest.json().catch(() => ({}));
+        throw new Error(err?.error ?? "Unable to start upload");
+      }
+      const { uploadUrl, objectKey } = await uploadRequest.json();
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed");
+      }
+      setEditState({ ...editState, profilePhotoKey: objectKey });
+      setEditPhotoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setEditPhotoError(message);
+    } finally {
+      setEditPhotoUploading(false);
+      event.target.value = "";
+    }
   };
 
   return (
@@ -796,10 +880,36 @@ export default function StudentManagement({
                 Close
               </button>
             </div>
-            <div className={styles.modalBody}>
-              <div className={styles.profileSection}>
-                <div className={styles.sectionTitle}>Core Details</div>
-                <div className={styles.profileGrid}>
+          <div className={styles.modalBody}>
+            <div className={styles.profileSection}>
+              <div className={styles.sectionTitle}>Core Details</div>
+              <div className={styles.profileGrid}>
+                  <label className={styles.label}>
+                    Profile Photo (Optional)
+                    <input
+                      className={styles.input}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleEditPhotoUpload}
+                      disabled={editPhotoUploading}
+                    />
+                  </label>
+                  <div className={styles.profilePhotoPlaceholder}>
+                    {editPhotoLoading ? (
+                      <div className={styles.photoSkeleton} />
+                    ) : editPhotoPreview || editPhotoUrl ? (
+                      <img
+                        className={styles.profilePhoto}
+                        src={editPhotoPreview ?? editPhotoUrl ?? ""}
+                        alt="Preview"
+                      />
+                    ) : (
+                      <span>No photo</span>
+                    )}
+                  </div>
+                  {editPhotoError ? (
+                    <div className={styles.error}>{editPhotoError}</div>
+                  ) : null}
                   <label className={styles.label}>
                     Name
                     <input
@@ -833,6 +943,66 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
+                    Gender
+                    <select
+                      className={styles.input}
+                      value={editState.gender}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          gender: event.target.value as "Male" | "Female",
+                        })
+                      }
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  </label>
+                  <label className={styles.label}>
+                    Date of Birth
+                    <input
+                      className={styles.input}
+                      type="date"
+                      value={editState.dateOfBirth}
+                      onChange={(event) =>
+                        setEditState({ ...editState, dateOfBirth: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Admission Number
+                    <input
+                      className={styles.input}
+                      value={editState.admissionNumber}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          admissionNumber: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Roll Number
+                    <input
+                      className={styles.input}
+                      value={editState.rollNumber}
+                      onChange={(event) =>
+                        setEditState({ ...editState, rollNumber: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Address
+                    <input
+                      className={styles.input}
+                      value={editState.address}
+                      onChange={(event) =>
+                        setEditState({ ...editState, address: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
                     Status
                     <select
                       className={styles.input}
@@ -848,13 +1018,84 @@ export default function StudentManagement({
                       <option value="Inactive">Inactive</option>
                     </select>
                   </label>
+                  <label className={styles.label}>
+                    Parent Name
+                    <input
+                      className={styles.input}
+                      value={editState.parentName}
+                      onChange={(event) =>
+                        setEditState({ ...editState, parentName: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Relation
+                    <input
+                      className={styles.input}
+                      value={editState.parentRelation}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          parentRelation: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Phone
+                    <input
+                      className={styles.input}
+                      value={editState.parentPhone}
+                      onChange={(event) =>
+                        setEditState({ ...editState, parentPhone: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Email
+                    <input
+                      className={styles.input}
+                      value={editState.parentEmail}
+                      onChange={(event) =>
+                        setEditState({ ...editState, parentEmail: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Occupation
+                    <input
+                      className={styles.input}
+                      value={editState.parentOccupation}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          parentOccupation: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
                 </div>
               </div>
             </div>
             <div className={styles.modalFooter}>
-            
-              <button className={styles.button} type="button" onClick={handleSaveEdit}>
-                Save Changes
+              <div>
+                {editSaveMessage ? (
+                  <div
+                    className={
+                      editSaveStatus === "success" ? styles.success : styles.error
+                    }
+                  >
+                    {editSaveMessage}
+                  </div>
+                ) : null}
+              </div>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={editSaveStatus === "saving"}
+              >
+                {editSaveStatus === "saving" ? "Saving..." : "Confirm & Save"}
               </button>
             </div>
           </div>

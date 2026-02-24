@@ -600,6 +600,12 @@
   font-size: 12px;
 }
 
+.success {
+  margin-top: 6px;
+  color: #15803d;
+  font-size: 12px;
+}
+
 @media (max-width: 700px) {
   .modalBackdrop {
     padding: 10px;

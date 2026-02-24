@@ -171,6 +171,7 @@ export default function HomeShell({
     if (response.ok) {
       fetchStudents(activeClass);
     }
+    return response.ok;
   };
 
   useEffect(() => {
