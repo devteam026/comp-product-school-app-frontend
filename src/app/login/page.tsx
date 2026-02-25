@@ -72,13 +72,13 @@ export default function LoginPage() {
       }
 
       const data = await response.json().catch(() => null);
-      if (data?.token) {
-        window.localStorage.setItem("authToken", data.token);
+      const token = data?.token as string | undefined;
+      if (token) {
+        window.localStorage.setItem("authToken", token);
         window.localStorage.setItem("userProfile", JSON.stringify(data.user ?? {}));
       }
 
       if (role === "teacher" && data?.user?.username) {
-        const token = data?.token as string | undefined;
         const classResponse = await fetch(
           apiUrl(`/api/classes/teacher/${encodeURIComponent(data.user.username)}`),
           {
@@ -92,6 +92,14 @@ export default function LoginPage() {
             return;
           }
         }
+      }
+
+      if (token) {
+        await fetch("/api/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
       }
 
       router.push("/home");

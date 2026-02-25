@@ -406,6 +406,20 @@
   padding-left: 18px;
   color: #475569;
   font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+
+.historyItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.historyMeta {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .modalBackdrop {
@@ -726,6 +740,12 @@
   gap: 8px 16px;
   font-size: 13px;
   color: #475569;
+}
+
+.metricEmpty {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .metricBar {

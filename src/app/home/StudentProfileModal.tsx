@@ -18,6 +18,17 @@ export default function StudentProfileModal({
   const [photoLoading, setPhotoLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const historyEntries =
+    student.historyEntries && student.historyEntries.length > 0
+      ? student.historyEntries
+      : student.history.map((entry) => ({ entry }));
+
+  const formatTimestamp = (value?: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString();
+  };
 
   const loadPhoto = async () => {
     setPhotoLoading(true);
@@ -212,9 +223,17 @@ export default function StudentProfileModal({
           <div className={styles.profileSection}>
             <div className={styles.sectionTitle}>History</div>
             <ul className={styles.historyList}>
-              {student.history.map((entry, index) => (
-                <li key={`${entry}-${index}`}>{entry}</li>
-              ))}
+              {historyEntries.map((item, index) => {
+                const timestamp = formatTimestamp(item.createdAt);
+                return (
+                  <li key={`${item.entry}-${index}`} className={styles.historyItem}>
+                    <span>{item.entry}</span>
+                    {timestamp ? (
+                      <span className={styles.historyMeta}>{timestamp}</span>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
