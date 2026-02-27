@@ -33,8 +33,10 @@ export default function HomeShell({
   username,
   classCode,
 }: HomeShellProps) {
-  const sidebarBg = process.env.NEXT_PUBLIC_SIDEBAR_BG?.trim();
-  const brandTitle = process.env.NEXT_PUBLIC_BRAND_NAME?.trim() || "School Portal";
+  const envSidebarBg = process.env.NEXT_PUBLIC_SIDEBAR_BG?.trim();
+  const envBrandTitle = process.env.NEXT_PUBLIC_BRAND_NAME?.trim() || "School Portal";
+  const [sidebarBg, setSidebarBg] = useState(envSidebarBg);
+  const [brandTitle, setBrandTitle] = useState(envBrandTitle);
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
   const [students, setStudents] = useState<Student[]>([]);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
@@ -60,6 +62,40 @@ export default function HomeShell({
   const [teacherOptions, setTeacherOptions] = useState<string[]>([]);
   const [isTeacherClassesLoading, setIsTeacherClassesLoading] = useState(false);
   const [activeClass, setActiveClass] = useState(role === "admin" ? "all" : "");
+
+  useEffect(() => {
+    let isActive = true;
+    fetch(apiUrl("/api/school"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isActive || !data) return;
+        if (typeof data.sidebarBg === "string" && data.sidebarBg.trim()) {
+          setSidebarBg(data.sidebarBg.trim());
+        }
+        if (typeof data.brandName === "string" && data.brandName.trim()) {
+          setBrandTitle(data.brandName.trim());
+        }
+        if (typeof data.appTitle === "string" && data.appTitle.trim()) {
+          document.title = data.appTitle.trim();
+        }
+        if (typeof data.appDescription === "string" && data.appDescription.trim()) {
+          const description = data.appDescription.trim();
+          let meta = document.querySelector('meta[name="description"]');
+          if (!meta) {
+            meta = document.createElement("meta");
+            meta.setAttribute("name", "description");
+            document.head.appendChild(meta);
+          }
+          meta.setAttribute("content", description);
+        }
+      })
+      .catch(() => {
+        // keep defaults on failure
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (role !== "teacher") return;

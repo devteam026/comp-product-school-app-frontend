@@ -42,6 +42,19 @@ export default function LoginPage() {
         setLogoUrl(data.logoUrl || null);
         setCampusImageUrl(data.campusImageUrl || null);
         setSchoolUrl(data.schoolUrl || null);
+        if (typeof data.appTitle === "string" && data.appTitle.trim()) {
+          document.title = data.appTitle.trim();
+        }
+        if (typeof data.appDescription === "string" && data.appDescription.trim()) {
+          const description = data.appDescription.trim();
+          let meta = document.querySelector('meta[name="description"]');
+          if (!meta) {
+            meta = document.createElement("meta");
+            meta.setAttribute("name", "description");
+            document.head.appendChild(meta);
+          }
+          meta.setAttribute("content", description);
+        }
       })
       .catch(() => {
         // keep defaults on failure
