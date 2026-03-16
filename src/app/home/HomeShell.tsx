@@ -8,6 +8,7 @@ import AttendanceManagement from "./AttendanceManagement";
 import FeeManagement from "./FeeManagement";
 import AIEngine from "./AIEngine";
 import HomeDashboard from "./HomeDashboard";
+import EmployeeManagement from "./EmployeeManagement";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -15,6 +16,7 @@ import { apiUrl } from "../../lib/api";
 const menuItems = [
   "Home",
   "Student Management",
+  "Employee Management",
   "Attendance Management",
   "Fee Management",
   "AI Insights",
@@ -52,10 +54,14 @@ export default function HomeShell({
 
   const role = displayRole.toLowerCase();
   const navItems = useMemo(() => {
+    let items = menuItems;
     if (role === "teacher") {
-      return menuItems.filter((item) => item !== "Fee Management");
+      items = items.filter((item) => item !== "Fee Management");
     }
-    return menuItems;
+    if (role !== "admin") {
+      items = items.filter((item) => item !== "Employee Management");
+    }
+    return items;
   }, [role]);
   const [adminClassOptions, setAdminClassOptions] = useState<string[]>([]);
   const [isAdminClassesLoading, setIsAdminClassesLoading] = useState(false);
@@ -161,6 +167,7 @@ export default function HomeShell({
   const subtitleMap: Record<MenuItem, string> = {
     Home: "School overview for the day and month.",
     "Student Management": "Add and track students in one place.",
+    "Employee Management": "Manage staff records and documents.",
     "Attendance Management": "Track daily attendance for each class.",
     "Fee Management": "Manage monthly fees, payments, and reports.",
     "AI Insights": "AI insights and top-rated lists.",
@@ -378,6 +385,8 @@ export default function HomeShell({
               classCode={activeClass}
               isLoading={isStudentsLoading}
             />
+          ) : activeItem === "Employee Management" ? (
+            <EmployeeManagement />
           ) : activeItem === "Attendance Management" ? (
             <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
           ) : activeItem === "Fee Management" ? (
