@@ -9,6 +9,7 @@ import FeeManagement from "./FeeManagement";
 import AIEngine from "./AIEngine";
 import HomeDashboard from "./HomeDashboard";
 import EmployeeManagement from "./EmployeeManagement";
+import TimetableManagement from "./TimetableManagement";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -17,6 +18,7 @@ const menuItems = [
   "Home",
   "Student Management",
   "Employee Management",
+  "Timetable Management",
   "Attendance Management",
   "Fee Management",
   "AI Insights",
@@ -59,7 +61,9 @@ export default function HomeShell({
       items = items.filter((item) => item !== "Fee Management");
     }
     if (role !== "admin") {
-      items = items.filter((item) => item !== "Employee Management");
+      items = items.filter(
+        (item) => item !== "Employee Management" && item !== "Timetable Management"
+      );
     }
     return items;
   }, [role]);
@@ -168,6 +172,7 @@ export default function HomeShell({
     Home: "School overview for the day and month.",
     "Student Management": "Add and track students in one place.",
     "Employee Management": "Manage staff records and documents.",
+    "Timetable Management": "Assign teachers to classes and periods.",
     "Attendance Management": "Track daily attendance for each class.",
     "Fee Management": "Manage monthly fees, payments, and reports.",
     "AI Insights": "AI insights and top-rated lists.",
@@ -387,6 +392,11 @@ export default function HomeShell({
             />
           ) : activeItem === "Employee Management" ? (
             <EmployeeManagement />
+          ) : activeItem === "Timetable Management" ? (
+            <TimetableManagement
+              activeClassCode={activeClass}
+              onSelectClass={(classCode) => setActiveClass(classCode)}
+            />
           ) : activeItem === "Attendance Management" ? (
             <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
           ) : activeItem === "Fee Management" ? (
