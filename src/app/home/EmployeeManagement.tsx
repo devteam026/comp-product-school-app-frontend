@@ -74,6 +74,9 @@ const departmentOptions = ["Teaching", "Accounts", "Admin", "Transport"] as cons
 const designationOptions = ["Teacher", "Accountant", "Clerk", "Driver"] as const;
 const employmentTypeOptions = ["Full-time", "Part-time", "Contract"] as const;
 
+const sanitizeDigits = (value: string, maxLen: number) =>
+  value.replace(/\D/g, "").slice(0, maxLen);
+
 const emptyEmployee = (): Employee => ({
   firstName: "",
   middleName: "",
@@ -574,7 +577,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Basic Information</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              First Name
+              First Name *
               <input
                 className={styles.input}
                 value={form.firstName}
@@ -591,7 +594,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Last Name
+              Last Name *
               <input
                 className={styles.input}
                 value={form.lastName}
@@ -600,7 +603,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Gender
+              Gender *
               <select
                 className={styles.input}
                 value={form.gender}
@@ -617,7 +620,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Date of Birth
+              Date of Birth *
               <input
                 className={styles.input}
                 type="date"
@@ -650,13 +653,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Contact Details</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Mobile Number
+              Mobile Number *
               <input
                 className={styles.input}
                 value={form.mobileNumber}
-                onChange={(e) => handleChange("mobileNumber", e.target.value)}
+                onChange={(e) =>
+                  handleChange("mobileNumber", sanitizeDigits(e.target.value, 10))
+                }
                 inputMode="numeric"
-                pattern="\\d*"
                 maxLength={10}
                 required
               />
@@ -665,13 +669,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Whatsapp Number
+              Whatsapp Number *
               <input
                 className={styles.input}
                 value={form.whatsappNumber}
-                onChange={(e) => handleChange("whatsappNumber", e.target.value)}
+                onChange={(e) =>
+                  handleChange("whatsappNumber", sanitizeDigits(e.target.value, 10))
+                }
                 inputMode="numeric"
-                pattern="\\d*"
                 maxLength={10}
                 required
               />
@@ -688,7 +693,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Address Line 1
+              Address Line 1 *
               <input
                 className={styles.input}
                 value={form.addressLine1}
@@ -732,7 +737,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Emergency Contact Name
+              Emergency Contact Name *
               <input
                 className={styles.input}
                 value={form.emergencyContactName}
@@ -746,7 +751,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Emergency Contact Number
+              Emergency Contact Number *
               <input
                 className={styles.input}
                 value={form.emergencyContactNumber}
@@ -794,9 +799,13 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               <input
                 className={styles.input}
                 value={form.yearOfPassing ?? ""}
-                onChange={(e) => handleChange("yearOfPassing", Number(e.target.value))}
+                onChange={(e) =>
+                  handleChange(
+                    "yearOfPassing",
+                    Number(sanitizeDigits(e.target.value, 4))
+                  )
+                }
                 inputMode="numeric"
-                pattern="\\d*"
                 maxLength={4}
               />
               {fieldErrors.yearOfPassing ? (
@@ -809,10 +818,12 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 className={styles.input}
                 value={form.experienceYears ?? ""}
                 onChange={(e) =>
-                  handleChange("experienceYears", Number(e.target.value))
+                  handleChange(
+                    "experienceYears",
+                    Number(sanitizeDigits(e.target.value, 2))
+                  )
                 }
                 inputMode="numeric"
-                pattern="\\d*"
                 maxLength={2}
               />
               {fieldErrors.experienceYears ? (
@@ -840,7 +851,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Employment Details</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Department
+              Department *
               <select
                 className={styles.input}
                 value={form.department}
@@ -859,7 +870,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Designation
+              Designation *
               <select
                 className={styles.input}
                 value={form.designation}
@@ -878,7 +889,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Employment Type
+              Employment Type *
               <select
                 className={styles.input}
                 value={form.employmentType}
@@ -897,7 +908,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Date of Joining
+              Date of Joining *
               <input
                 className={styles.input}
                 type="date"
@@ -938,7 +949,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Legal & Compliance</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Aadhaar Number
+              Aadhaar Number *
               <input
                 className={styles.input}
                 value={form.aadhaarNumber}
@@ -992,7 +1003,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               type="button"
               onClick={() => handleDocUpload("idProof")}
             >
-              Upload ID Proof
+              Upload ID Proof *
             </button>
             {selectedFiles.idProof ? (
               <div className={styles.helperText}>{selectedFiles.idProof}</div>
@@ -1419,7 +1430,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Basic Information</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    First Name
+                    First Name *
                     <input
                       className={styles.input}
                       value={editState.firstName}
@@ -1435,7 +1446,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Last Name
+                    Last Name *
                     <input
                       className={styles.input}
                       value={editState.lastName}
@@ -1443,7 +1454,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Gender
+                    Gender *
                     <select
                       className={styles.input}
                       value={editState.gender}
@@ -1460,7 +1471,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Date of Birth
+                    Date of Birth *
                     <input
                       className={styles.input}
                       type="date"
@@ -1502,15 +1513,17 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Contact Details</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Mobile
+                    Mobile *
                     <input
                       className={styles.input}
                       value={editState.mobileNumber}
                       onChange={(e) =>
-                        handleEditChange("mobileNumber", e.target.value)
+                        handleEditChange(
+                          "mobileNumber",
+                          sanitizeDigits(e.target.value, 10)
+                        )
                       }
                       inputMode="numeric"
-                      pattern="\\d*"
                       maxLength={10}
                       required
                     />
@@ -1519,15 +1532,17 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
                   <label className={styles.label}>
-                    Whatsapp
+                    Whatsapp *
                     <input
                       className={styles.input}
                       value={editState.whatsappNumber}
                       onChange={(e) =>
-                        handleEditChange("whatsappNumber", e.target.value)
+                        handleEditChange(
+                          "whatsappNumber",
+                          sanitizeDigits(e.target.value, 10)
+                        )
                       }
                       inputMode="numeric"
-                      pattern="\\d*"
                       maxLength={10}
                       required
                     />
@@ -1544,7 +1559,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Address Line 1
+                    Address Line 1 *
                     <input
                       className={styles.input}
                       value={editState.addressLine1}
@@ -1592,7 +1607,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Emergency Contact Name
+                    Emergency Contact Name *
                     <input
                       className={styles.input}
                       value={editState.emergencyContactName}
@@ -1608,7 +1623,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Emergency Contact Number
+                    Emergency Contact Number *
                     <input
                       className={styles.input}
                       value={editState.emergencyContactNumber}
@@ -1667,10 +1682,12 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                       className={styles.input}
                       value={editState.yearOfPassing ?? ""}
                       onChange={(e) =>
-                        handleEditChange("yearOfPassing", Number(e.target.value))
+                        handleEditChange(
+                          "yearOfPassing",
+                          Number(sanitizeDigits(e.target.value, 4))
+                        )
                       }
                       inputMode="numeric"
-                      pattern="\\d*"
                       maxLength={4}
                     />
               {fieldErrors.yearOfPassing ? (
@@ -1683,10 +1700,12 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                       className={styles.input}
                       value={editState.experienceYears ?? ""}
                       onChange={(e) =>
-                        handleEditChange("experienceYears", Number(e.target.value))
+                        handleEditChange(
+                          "experienceYears",
+                          Number(sanitizeDigits(e.target.value, 2))
+                        )
                       }
                       inputMode="numeric"
-                      pattern="\\d*"
                       maxLength={2}
                     />
               {fieldErrors.experienceYears ? (
@@ -1709,7 +1728,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Employment Details</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Department
+                    Department *
                     <select
                       className={styles.input}
                       value={editState.department}
@@ -1730,7 +1749,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Designation
+                    Designation *
                     <select
                       className={styles.input}
                       value={editState.designation}
@@ -1751,7 +1770,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Employment Type
+                    Employment Type *
                     <select
                       className={styles.input}
                       value={editState.employmentType}
@@ -1774,7 +1793,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Date of Joining
+                    Date of Joining *
                     <input
                       className={styles.input}
                       type="date"
@@ -1804,7 +1823,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Legal & Compliance</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Aadhaar Number
+                    Aadhaar Number *
                     <input
                       className={styles.input}
                       value={editState.aadhaarNumber}
@@ -1877,7 +1896,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     type="button"
                     onClick={() => handleEditDocUpload("idProof")}
                   >
-                    Upload ID Proof
+                    Upload ID Proof *
                   </button>
                   {fieldErrors.idProofKey ? (
                     <div className={styles.error}>{fieldErrors.idProofKey}</div>
