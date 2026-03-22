@@ -17,7 +17,8 @@ export default function HomePage() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("userProfile");
-    if (!stored) {
+    const token = window.localStorage.getItem("authToken");
+    if (!stored || !token) {
       router.replace("/login");
       return;
     }

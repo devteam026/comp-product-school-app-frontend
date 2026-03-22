@@ -42,6 +42,19 @@ export default function LoginPage() {
         setLogoUrl(data.logoUrl || null);
         setCampusImageUrl(data.campusImageUrl || null);
         setSchoolUrl(data.schoolUrl || null);
+        if (typeof data.appTitle === "string" && data.appTitle.trim()) {
+          document.title = data.appTitle.trim();
+        }
+        if (typeof data.appDescription === "string" && data.appDescription.trim()) {
+          const description = data.appDescription.trim();
+          let meta = document.querySelector('meta[name="description"]');
+          if (!meta) {
+            meta = document.createElement("meta");
+            meta.setAttribute("name", "description");
+            document.head.appendChild(meta);
+          }
+          meta.setAttribute("content", description);
+        }
       })
       .catch(() => {
         // keep defaults on failure
@@ -72,13 +85,13 @@ export default function LoginPage() {
       }
 
       const data = await response.json().catch(() => null);
-      if (data?.token) {
-        window.localStorage.setItem("authToken", data.token);
+      const token = data?.token as string | undefined;
+      if (token) {
+        window.localStorage.setItem("authToken", token);
         window.localStorage.setItem("userProfile", JSON.stringify(data.user ?? {}));
       }
 
       if (role === "teacher" && data?.user?.username) {
-        const token = data?.token as string | undefined;
         const classResponse = await fetch(
           apiUrl(`/api/classes/teacher/${encodeURIComponent(data.user.username)}`),
           {
@@ -92,6 +105,14 @@ export default function LoginPage() {
             return;
           }
         }
+      }
+
+      if (token) {
+        await fetch("/api/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
       }
 
       router.push("/home");

@@ -46,19 +46,25 @@ export default function AttendanceManagement({
   const [sortDir, setSortDir] = useState("asc");
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(10);
   const [page, setPage] = useState(1);
+  const activeStudents = useMemo(
+    () => students.filter((student) => student.status === "Active"),
+    [students]
+  );
 
   const classOptions = useMemo(() => {
-    return Array.from(new Set(students.map((student) => student.classCode))).sort();
-  }, [students]);
+    return Array.from(
+      new Set(activeStudents.map((student) => student.classCode))
+    ).sort();
+  }, [activeStudents]);
 
   const allPresent = useMemo(() => {
-    if (students.length === 0) return false;
-    return students.every((student) => attendance[student.id] !== "Absent");
-  }, [students, attendance]);
+    if (activeStudents.length === 0) return false;
+    return activeStudents.every((student) => attendance[student.id] !== "Absent");
+  }, [activeStudents, attendance]);
 
   const handleMarkAllPresent = () => {
     const updated: Record<string, Status> = {};
-    students.forEach((student) => {
+    activeStudents.forEach((student) => {
       updated[student.id] = "Present";
     });
     setAttendance(updated);
@@ -72,12 +78,14 @@ export default function AttendanceManagement({
   };
 
   const presentCount = useMemo(() => {
-    return students.filter((student) => attendance[student.id] !== "Absent").length;
-  }, [students, attendance]);
+    return activeStudents.filter((student) => attendance[student.id] !== "Absent")
+      .length;
+  }, [activeStudents, attendance]);
 
   const absentCount = useMemo(() => {
-    return students.filter((student) => attendance[student.id] === "Absent").length;
-  }, [students, attendance]);
+    return activeStudents.filter((student) => attendance[student.id] === "Absent")
+      .length;
+  }, [activeStudents, attendance]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -85,7 +93,7 @@ export default function AttendanceManagement({
 
     try {
       const token = window.localStorage.getItem("authToken");
-      const records = students.map((student) => ({
+      const records = activeStudents.map((student) => ({
         studentId: student.id,
         status: attendance[student.id] ?? "Present",
       }));
@@ -139,9 +147,17 @@ export default function AttendanceManagement({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attendanceDate]);
 
+  useEffect(() => {
+    if (!saveMessage) return;
+    const timer = window.setTimeout(() => {
+      setSaveMessage(null);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [saveMessage]);
+
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return students.filter((student) => {
+    return activeStudents.filter((student) => {
       const status: Status = attendance[student.id] ?? "Present";
       const matchesQuery =
         query.length === 0 ||
@@ -155,7 +171,7 @@ export default function AttendanceManagement({
         filterStatus === "all" || status === filterStatus;
       return matchesQuery && matchesClass && matchesGender && matchesStatus;
     });
-  }, [students, attendance, search, filterClass, filterGender, filterStatus]);
+  }, [activeStudents, attendance, search, filterClass, filterGender, filterStatus]);
 
   const sortedStudents = useMemo(() => {
     const sorted = [...filteredStudents].sort((a, b) => {

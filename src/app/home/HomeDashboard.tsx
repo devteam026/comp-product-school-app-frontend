@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
 
 type HomeDashboardProps = {
   students: Student[];
+  role: string;
   dashboardData?: {
     attendanceToday?: { present: number; absent: number; notRecorded?: number };
     feeStats?: { paid: number; unpaid: number; free: number };
@@ -18,12 +19,19 @@ type HomeDashboardProps = {
 
 export default function HomeDashboard({
   students,
+  role,
   dashboardData,
   isLoading,
 }: HomeDashboardProps) {
-  const totalStudents = students.length;
-  const maleCount = students.filter((student) => student.gender === "Male").length;
-  const femaleCount = students.filter(
+  const activeStudents = useMemo(
+    () => students.filter((student) => student.status === "Active"),
+    [students]
+  );
+  const totalStudents = activeStudents.length;
+  const maleCount = activeStudents.filter(
+    (student) => student.gender === "Male"
+  ).length;
+  const femaleCount = activeStudents.filter(
     (student) => student.gender === "Female"
   ).length;
   const attendanceToday = dashboardData?.attendanceToday ?? {
@@ -32,8 +40,22 @@ export default function HomeDashboard({
     notRecorded: 0,
   };
   const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, free: 0 };
+  const canSeeFees = role === "admin" || role === "accountant";
   const dailyAttendance = dashboardData?.dailyAttendance ?? [];
+  const classAttendance = dashboardData?.classAttendance ?? [];
   const classStudentCounts = dashboardData?.classStudentCounts ?? [];
+  const lowestAttendance = useMemo(() => {
+    if (!classAttendance.length) return null;
+    return classAttendance
+      .map((item) => {
+        const present = Number(item.present ?? 0);
+        const absent = Number(item.absent ?? 0);
+        const total = present + absent;
+        const rate = total === 0 ? 0 : (present / total) * 100;
+        return { ...item, present, absent, total, rate };
+      })
+      .sort((a, b) => a.rate - b.rate)[0];
+  }, [classAttendance]);
   const totalStudentsByClass = classStudentCounts.reduce(
     (sum, item) => sum + Number(item.present ?? 0),
     0
@@ -169,47 +191,70 @@ export default function HomeDashboard({
           </div>
         </article>
 
-        <article className={styles.metricCard}>
-          <h2 className={styles.metricTitle}>Fees This Month</h2>
-          <p className={styles.metricValue}>{feeStats.paid}</p>
-          <div className={styles.metricSplit}>
-            <span>Paid: {feeStats.paid}</span>
-            <span>Unpaid: {feeStats.unpaid}</span>
-            <span>Free: {feeStats.free}</span>
-          </div>
-          <div className={styles.metricBar}>
-            <span
-              className={styles.metricFill}
-              style={{
-                width: `${
-                  (feeStats.paid /
-                    (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                  100
-                }%`,
-              }}
-            />
-            <span
-              className={styles.metricFillAlt}
-              style={{
-                width: `${
-                  (feeStats.unpaid /
-                    (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                  100
-                }%`,
-              }}
-            />
-            <span
-              className={styles.metricFillMuted}
-              style={{
-                width: `${
-                  (feeStats.free /
-                    (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                  100
-                }%`,
-              }}
-            />
-          </div>
-        </article>
+        {role === "admin" ? (
+          <article className={styles.metricCard}>
+            <h2 className={styles.metricTitle}>Lowest Attendance %</h2>
+            {lowestAttendance ? (
+              <>
+                <p className={styles.metricValue}>
+                  {lowestAttendance.rate.toFixed(0)}%
+                </p>
+                <div className={styles.metricSplit}>
+                  <span>Class: {lowestAttendance.classCode}</span>
+                  <span>
+                    Present: {lowestAttendance.present}/{lowestAttendance.total}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className={styles.metricEmpty}>No attendance data</p>
+            )}
+          </article>
+        ) : null}
+
+        {canSeeFees ? (
+          <article className={styles.metricCard}>
+            <h2 className={styles.metricTitle}>Fees This Month</h2>
+            <p className={styles.metricValue}>{feeStats.paid}</p>
+            <div className={styles.metricSplit}>
+              <span>Paid: {feeStats.paid}</span>
+              <span>Unpaid: {feeStats.unpaid}</span>
+              <span>Free: {feeStats.free}</span>
+            </div>
+            <div className={styles.metricBar}>
+              <span
+                className={styles.metricFill}
+                style={{
+                  width: `${
+                    (feeStats.paid /
+                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
+                    100
+                  }%`,
+                }}
+              />
+              <span
+                className={styles.metricFillAlt}
+                style={{
+                  width: `${
+                    (feeStats.unpaid /
+                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
+                    100
+                  }%`,
+                }}
+              />
+              <span
+                className={styles.metricFillMuted}
+                style={{
+                  width: `${
+                    (feeStats.free /
+                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
+                    100
+                  }%`,
+                }}
+              />
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <section className={styles.chartGrid}>

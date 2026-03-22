@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const PUBLIC_PATHS = ["/login", "/signup"];
+
 export function middleware(request: NextRequest) {
-  const session = request.cookies.get("session");
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/login" && session) {
-    return NextResponse.redirect(new URL("/home", request.url));
+  if (PUBLIC_PATHS.includes(pathname)) {
+    return NextResponse.next();
   }
 
-  if (pathname === "/home" && !session) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  const session = request.cookies.get("session")?.value;
+  if (!session) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("from", pathname);
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/login", "/home"],
+  matcher: ["/((?!api|_next|favicon.ico).*)"],
 };

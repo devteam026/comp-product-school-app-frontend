@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import styles from "../styles/home.module.css";
 import LogoutButton from "./LogoutButton";
 import StudentManagement from "./StudentManagement";
@@ -8,6 +8,9 @@ import AttendanceManagement from "./AttendanceManagement";
 import FeeManagement from "./FeeManagement";
 import AIEngine from "./AIEngine";
 import HomeDashboard from "./HomeDashboard";
+import EmployeeManagement from "./EmployeeManagement";
+import TimetableManagement from "./TimetableManagement";
+import LeaveManagement from "./LeaveManagement";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -15,8 +18,11 @@ import { apiUrl } from "../../lib/api";
 const menuItems = [
   "Home",
   "Student Management",
+  "Employee Management",
+  "Timetable Management",
   "Attendance Management",
   "Fee Management",
+  "Leave Management",
   "AI Insights",
 ] as const;
 
@@ -33,6 +39,10 @@ export default function HomeShell({
   username,
   classCode,
 }: HomeShellProps) {
+  const envSidebarBg = process.env.NEXT_PUBLIC_SIDEBAR_BG?.trim();
+  const envBrandTitle = process.env.NEXT_PUBLIC_BRAND_NAME?.trim() || "School Portal";
+  const [sidebarBg, setSidebarBg] = useState(envSidebarBg);
+  const [brandTitle, setBrandTitle] = useState(envBrandTitle);
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
   const [students, setStudents] = useState<Student[]>([]);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
@@ -47,11 +57,57 @@ export default function HomeShell({
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
 
   const role = displayRole.toLowerCase();
+  const navItems = useMemo(() => {
+    let items = menuItems;
+    if (role === "teacher") {
+      items = items.filter((item) => item !== "Fee Management");
+    }
+    if (role !== "admin") {
+      items = items.filter(
+        (item) => item !== "Employee Management" && item !== "Timetable Management"
+      );
+    }
+    return items;
+  }, [role]);
   const [adminClassOptions, setAdminClassOptions] = useState<string[]>([]);
   const [isAdminClassesLoading, setIsAdminClassesLoading] = useState(false);
   const [teacherOptions, setTeacherOptions] = useState<string[]>([]);
   const [isTeacherClassesLoading, setIsTeacherClassesLoading] = useState(false);
   const [activeClass, setActiveClass] = useState(role === "admin" ? "all" : "");
+
+  useEffect(() => {
+    let isActive = true;
+    fetch(apiUrl("/api/school"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isActive || !data) return;
+        if (typeof data.sidebarBg === "string" && data.sidebarBg.trim()) {
+          setSidebarBg(data.sidebarBg.trim());
+        }
+        if (typeof data.brandName === "string" && data.brandName.trim()) {
+          setBrandTitle(data.brandName.trim());
+        }
+        if (typeof data.appTitle === "string" && data.appTitle.trim()) {
+          document.title = data.appTitle.trim();
+        }
+        if (typeof data.appDescription === "string" && data.appDescription.trim()) {
+          const description = data.appDescription.trim();
+          let meta = document.querySelector('meta[name="description"]');
+          if (!meta) {
+            meta = document.createElement("meta");
+            meta.setAttribute("name", "description");
+            document.head.appendChild(meta);
+          }
+          meta.setAttribute("content", description);
+        }
+      })
+      .catch(() => {
+        // keep defaults on failure
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (role !== "teacher") return;
@@ -109,11 +165,19 @@ export default function HomeShell({
   const showNoClassNotice =
     role === "teacher" && !isTeacherClassesLoading && teacherOptions.length === 0;
 
+  useEffect(() => {
+    if (navItems.includes(activeItem)) return;
+    setActiveItem(navItems[0] ?? "Home");
+  }, [navItems, activeItem]);
+
   const subtitleMap: Record<MenuItem, string> = {
     Home: "School overview for the day and month.",
     "Student Management": "Add and track students in one place.",
+    "Employee Management": "Manage staff records and documents.",
+    "Timetable Management": "Assign teachers to classes and periods.",
     "Attendance Management": "Track daily attendance for each class.",
     "Fee Management": "Manage monthly fees, payments, and reports.",
+    "Leave Management": "Apply for leave and manage approvals.",
     "AI Insights": "AI insights and top-rated lists.",
   };
 
@@ -171,6 +235,7 @@ export default function HomeShell({
     if (response.ok) {
       fetchStudents(activeClass);
     }
+    return response.ok;
   };
 
   useEffect(() => {
@@ -212,9 +277,16 @@ export default function HomeShell({
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        <aside className={styles.sidebar}>
+        <aside
+          className={styles.sidebar}
+          style={
+            sidebarBg
+              ? ({ "--sidebar-bg": sidebarBg } as CSSProperties)
+              : undefined
+          }
+        >
           <div>
-            <div className={styles.brand}>School Portal</div>
+            <div className={styles.brand}>{brandTitle}</div>
             <div className={styles.user}>
               {displayRole} · {username}
             </div>
@@ -224,7 +296,7 @@ export default function HomeShell({
           </div>
 
           <nav className={styles.nav}>
-            {menuItems.map((item) => (
+            {navItems.map((item) => (
               <button
                 key={item}
                 className={`${styles.navItem} ${
@@ -308,6 +380,7 @@ export default function HomeShell({
           {activeItem === "Home" ? (
             <HomeDashboard
               students={visibleStudents}
+              role={role}
               dashboardData={dashboardData}
               isLoading={isDashboardLoading}
             />
@@ -320,6 +393,15 @@ export default function HomeShell({
               classCode={activeClass}
               isLoading={isStudentsLoading}
             />
+          ) : activeItem === "Employee Management" ? (
+            <EmployeeManagement />
+          ) : activeItem === "Timetable Management" ? (
+            <TimetableManagement
+              activeClassCode={activeClass}
+              onSelectClass={(classCode) => setActiveClass(classCode)}
+            />
+          ) : activeItem === "Leave Management" ? (
+            <LeaveManagement role={role} />
           ) : activeItem === "Attendance Management" ? (
             <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
           ) : activeItem === "Fee Management" ? (

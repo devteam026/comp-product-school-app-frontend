@@ -11,6 +11,8 @@ export default function LogoutButton({ className }: LogoutButtonProps) {
 
   const handleLogout = async () => {
     await fetch("/api/logout", { method: "POST" });
+    window.localStorage.removeItem("authToken");
+    window.localStorage.removeItem("userProfile");
     router.push("/login");
     router.refresh();
   };

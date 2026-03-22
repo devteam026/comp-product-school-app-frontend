@@ -18,6 +18,7 @@ export type Student = {
   history: string[];
   feeType: "Paid" | "Free";
   profilePhotoKey?: string;
+  historyEntries?: { entry: string; createdAt?: string | null }[];
 };
 
 export const seedStudents: Student[] = [
