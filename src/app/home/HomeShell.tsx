@@ -10,6 +10,7 @@ import AIEngine from "./AIEngine";
 import HomeDashboard from "./HomeDashboard";
 import EmployeeManagement from "./EmployeeManagement";
 import TimetableManagement from "./TimetableManagement";
+import LeaveManagement from "./LeaveManagement";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -21,6 +22,7 @@ const menuItems = [
   "Timetable Management",
   "Attendance Management",
   "Fee Management",
+  "Leave Management",
   "AI Insights",
 ] as const;
 
@@ -175,6 +177,7 @@ export default function HomeShell({
     "Timetable Management": "Assign teachers to classes and periods.",
     "Attendance Management": "Track daily attendance for each class.",
     "Fee Management": "Manage monthly fees, payments, and reports.",
+    "Leave Management": "Apply for leave and manage approvals.",
     "AI Insights": "AI insights and top-rated lists.",
   };
 
@@ -397,6 +400,8 @@ export default function HomeShell({
               activeClassCode={activeClass}
               onSelectClass={(classCode) => setActiveClass(classCode)}
             />
+          ) : activeItem === "Leave Management" ? (
+            <LeaveManagement role={role} />
           ) : activeItem === "Attendance Management" ? (
             <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
           ) : activeItem === "Fee Management" ? (

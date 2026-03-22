@@ -1393,7 +1393,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     setClassMessage("Classes assigned successfully.");
                     setShowClassModal(false);
                   } else {
-                    setClassMessage("Failed to assign classes.");
+                    let message = "Failed to assign classes.";
+                    try {
+                      const data = await response.json();
+                      if (data?.message) message = data.message;
+                    } catch {
+                      // ignore parse errors
+                    }
+                    setClassMessage(message);
                   }
                 }}
               >
