@@ -9,6 +9,8 @@ type LeaveCategory = {
   name: string;
   role: string;
   maxDays: number;
+  periodType?: string | null;
+  maxPerPeriod?: number | null;
   active: boolean;
 };
 
@@ -41,10 +43,17 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [decisionPending, setDecisionPending] = useState<Record<number, string>>(
+    {}
+  );
 
   const [catName, setCatName] = useState("");
   const [catRole, setCatRole] = useState("teacher");
   const [catDays, setCatDays] = useState(1);
+  const [catPeriodType, setCatPeriodType] = useState<"MONTHLY" | "YEARLY" | "">(
+    ""
+  );
+  const [catMaxPerPeriod, setCatMaxPerPeriod] = useState(1);
   const [catActive, setCatActive] = useState(true);
 
   const [leaveTypeId, setLeaveTypeId] = useState("");
@@ -134,6 +143,22 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
       setMessage("Select leave type and dates.");
       return;
     }
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setMessage("Invalid date selection.");
+      return;
+    }
+    if (start > end) {
+      setMessage("Start date must be before or equal to end date.");
+      return;
+    }
+    if (start < today) {
+      setMessage("Start date cannot be in the past.");
+      return;
+    }
     const token = window.localStorage.getItem("authToken");
     const response = await fetch(apiUrl("/api/leaves"), {
       method: "POST",
@@ -158,7 +183,14 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
       setAttachmentKey(null);
       loadData();
     } else {
-      setMessage("Unable to submit leave.");
+      let errorMessage = "Unable to submit leave.";
+      try {
+        const data = await response.json();
+        if (data?.message) errorMessage = data.message;
+      } catch {
+        // ignore
+      }
+      setMessage(errorMessage);
     }
   };
 
@@ -174,6 +206,8 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
         name: catName,
         role: catRole,
         maxDays: catDays,
+        periodType: catPeriodType || null,
+        maxPerPeriod: catPeriodType ? catMaxPerPeriod : null,
         active: catActive,
       }),
     });
@@ -181,6 +215,8 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
       setMessage("Category saved.");
       setCatName("");
       setCatDays(1);
+      setCatPeriodType("");
+      setCatMaxPerPeriod(1);
       loadData();
     } else {
       setMessage("Unable to save category.");
@@ -188,6 +224,10 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
   };
 
   const handleDecision = async (id: number, status: string) => {
+    if (decisionPending[id]) {
+      return;
+    }
+    setDecisionPending((prev) => ({ ...prev, [id]: status }));
     const token = window.localStorage.getItem("authToken");
     const response = await fetch(apiUrl(`/api/leaves/${id}/decision`), {
       method: "POST",
@@ -203,6 +243,11 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
     } else {
       setMessage("Unable to update.");
     }
+    setDecisionPending((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const visibleCategories = useMemo(() => {
@@ -239,7 +284,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
             <div className={styles.sectionTitle}>Add Leave Category</div>
             <div className={styles.fieldGrid}>
               <label className={styles.label}>
-                Leave Category Name *
+                Leave Category Name <span className={styles.requiredMark}>*</span>
                 <input
                   className={styles.input}
                   value={catName}
@@ -247,7 +292,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                 />
               </label>
               <label className={styles.label}>
-                Role *
+                Role <span className={styles.requiredMark}>*</span>
                 <select
                   className={styles.input}
                   value={catRole}
@@ -261,12 +306,36 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                 </select>
               </label>
               <label className={styles.label}>
-                Days *
+                Total Days <span className={styles.requiredMark}>*</span>
                 <input
                   className={styles.input}
                   type="number"
                   value={catDays}
                   onChange={(e) => setCatDays(Number(e.target.value))}
+                />
+              </label>
+              <label className={styles.label}>
+                Limit Period
+                <select
+                  className={styles.input}
+                  value={catPeriodType}
+                  onChange={(e) =>
+                    setCatPeriodType(e.target.value as "MONTHLY" | "YEARLY" | "")
+                  }
+                >
+                  <option value="">None</option>
+                  <option value="MONTHLY">Monthly</option>
+                  <option value="YEARLY">Yearly</option>
+                </select>
+              </label>
+              <label className={styles.label}>
+                Max Days per Period
+                <input
+                  className={styles.input}
+                  type="number"
+                  value={catMaxPerPeriod}
+                  onChange={(e) => setCatMaxPerPeriod(Number(e.target.value))}
+                  disabled={!catPeriodType}
                 />
               </label>
               <label className={styles.label}>
@@ -296,7 +365,9 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                     <th>#</th>
                     <th>Name</th>
                     <th>Role</th>
-                    <th>Days</th>
+                    <th>Total Days</th>
+                    <th>Period</th>
+                    <th>Max Days/Period</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -307,6 +378,8 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                       <td>{cat.name}</td>
                       <td>{cat.role}</td>
                       <td>{cat.maxDays}</td>
+                      <td>{cat.periodType ?? "-"}</td>
+                      <td>{cat.maxPerPeriod ?? "-"}</td>
                       <td>{cat.active ? "Active" : "Inactive"}</td>
                     </tr>
                   ))}
@@ -339,20 +412,44 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                     <td>{req.toDate}</td>
                     <td>{req.status}</td>
                     <td>
-                      <button
-                        className={styles.inlineButton}
-                        type="button"
-                        onClick={() => handleDecision(req.id, "APPROVED")}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        className={styles.inlineButton}
-                        type="button"
-                        onClick={() => handleDecision(req.id, "REJECTED")}
-                      >
-                        Reject
-                      </button>
+                      {(() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const from = new Date(req.fromDate);
+                        const isFuture = !Number.isNaN(from.getTime()) && from > today;
+                        const approveDisabled =
+                          decisionPending[req.id] === "APPROVED" ||
+                          req.status === "APPROVED" ||
+                          req.status === "REJECTED";
+                        const rejectDisabled =
+                          decisionPending[req.id] === "REJECTED" ||
+                          req.status === "REJECTED" ||
+                          (req.status === "APPROVED" && !isFuture);
+                        return (
+                          <>
+                            <button
+                              className={styles.inlineButton}
+                              type="button"
+                              onClick={() => handleDecision(req.id, "APPROVED")}
+                              disabled={approveDisabled}
+                            >
+                              {decisionPending[req.id] === "APPROVED"
+                                ? "Approving..."
+                                : "Approve"}
+                            </button>
+                            <button
+                              className={styles.inlineButton}
+                              type="button"
+                              onClick={() => handleDecision(req.id, "REJECTED")}
+                              disabled={rejectDisabled}
+                            >
+                              {decisionPending[req.id] === "REJECTED"
+                                ? "Rejecting..."
+                                : "Reject"}
+                            </button>
+                          </>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -365,7 +462,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
           <div className={styles.sectionTitle}>Leave Request</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Leave Type *
+              Leave Type <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={leaveTypeId}
@@ -380,7 +477,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
               </select>
             </label>
             <label className={styles.label}>
-              From Date *
+              From Date <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -389,7 +486,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
               />
             </label>
             <label className={styles.label}>
-              To Date *
+              To Date <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="date"

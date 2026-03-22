@@ -144,8 +144,20 @@ export default function StudentManagement({
   }, [selectedStudent, editState]);
 
   const hasClassLock = Boolean(classCode && classCode !== "all");
-  const derivedGrade = hasClassLock ? classCode!.slice(0, -1) : grade;
-  const derivedSection = hasClassLock ? classCode!.slice(-1) : section;
+  const parseClassCode = (code: string) => {
+    const trimmed = code.trim();
+    const match = trimmed.match(/^(\d+)([A-Za-z])$/);
+    if (match) {
+      return { grade: match[1], section: match[2] };
+    }
+    return { grade: trimmed, section: "" };
+  };
+  const lockedParsed = hasClassLock ? parseClassCode(classCode!) : null;
+  const derivedGrade = hasClassLock ? lockedParsed!.grade : grade;
+  const derivedSection = hasClassLock ? lockedParsed!.section : section;
+  const displayLockedSection = hasClassLock
+    ? derivedSection || "N/A"
+    : derivedSection;
 
   const classOptions = useMemo(() => {
     const classCodes = Array.from(
@@ -487,7 +499,7 @@ export default function StudentManagement({
               <input
                 className={styles.input}
                 type="file"
-                accept="image/*"
+                accept="image/<span className={styles.requiredMark}>*</span>"
                 onChange={handlePhotoUpload}
                 disabled={photoUploading}
               />
@@ -591,7 +603,7 @@ export default function StudentManagement({
               <input
                 className={styles.input}
                 type="text"
-                value={derivedSection}
+                value={hasClassLock ? displayLockedSection : derivedSection}
                 onChange={(event) => setSection(event.target.value)}
                 disabled={hasClassLock}
                 required={!hasClassLock}
@@ -889,7 +901,7 @@ export default function StudentManagement({
                     <input
                       className={styles.input}
                       type="file"
-                      accept="image/*"
+                      accept="image/<span className={styles.requiredMark}>*</span>"
                       onChange={handleEditPhotoUpload}
                       disabled={editPhotoUploading}
                     />

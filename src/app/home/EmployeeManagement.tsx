@@ -577,7 +577,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Basic Information</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              First Name *
+              First Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.firstName}
@@ -594,7 +594,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Last Name *
+              Last Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.lastName}
@@ -603,7 +603,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Gender *
+              Gender <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={form.gender}
@@ -620,7 +620,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Date of Birth *
+              Date of Birth <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -637,7 +637,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               <input
                 className={styles.input}
                 type="file"
-                accept="image/*"
+                accept="image/<span className={styles.requiredMark}>*</span>"
                 onChange={handlePhotoSelect}
                 disabled={isUploading}
               />
@@ -653,7 +653,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Contact Details</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Mobile Number *
+              Mobile Number <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.mobileNumber}
@@ -669,7 +669,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Whatsapp Number *
+              Whatsapp Number <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.whatsappNumber}
@@ -693,7 +693,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Address Line 1 *
+              Address Line 1 <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.addressLine1}
@@ -737,7 +737,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Emergency Contact Name *
+              Emergency Contact Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.emergencyContactName}
@@ -751,7 +751,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Emergency Contact Number *
+              Emergency Contact Number <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.emergencyContactNumber}
@@ -851,7 +851,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Employment Details</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Department *
+              Department <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={form.department}
@@ -870,7 +870,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Designation *
+              Designation <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={form.designation}
@@ -889,7 +889,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Employment Type *
+              Employment Type <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={form.employmentType}
@@ -908,7 +908,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Date of Joining *
+              Date of Joining <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -949,7 +949,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Legal & Compliance</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Aadhaar Number *
+              Aadhaar Number <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.aadhaarNumber}
@@ -1437,7 +1437,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Basic Information</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    First Name *
+                    First Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.firstName}
@@ -1453,7 +1453,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Last Name *
+                    Last Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.lastName}
@@ -1461,7 +1461,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Gender *
+                    Gender <span className={styles.requiredMark}>*</span>
                     <select
                       className={styles.input}
                       value={editState.gender}
@@ -1478,7 +1478,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Date of Birth *
+                    Date of Birth <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       type="date"
@@ -1495,7 +1495,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     <input
                       className={styles.input}
                       type="file"
-                      accept="image/*"
+                      accept="image/<span className={styles.requiredMark}>*</span>"
                       onChange={handleEditPhotoSelect}
                       disabled={isUploading}
                     />
@@ -1520,7 +1520,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Contact Details</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Mobile *
+                    Mobile <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.mobileNumber}
@@ -1539,7 +1539,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
                   <label className={styles.label}>
-                    Whatsapp *
+                    Whatsapp <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.whatsappNumber}
@@ -1566,7 +1566,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Address Line 1 *
+                    Address Line 1 <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.addressLine1}
@@ -1614,7 +1614,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    Emergency Contact Name *
+                    Emergency Contact Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.emergencyContactName}
@@ -1630,7 +1630,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Emergency Contact Number *
+                    Emergency Contact Number <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.emergencyContactNumber}
@@ -1735,7 +1735,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Employment Details</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Department *
+                    Department <span className={styles.requiredMark}>*</span>
                     <select
                       className={styles.input}
                       value={editState.department}
@@ -1756,7 +1756,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Designation *
+                    Designation <span className={styles.requiredMark}>*</span>
                     <select
                       className={styles.input}
                       value={editState.designation}
@@ -1777,7 +1777,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Employment Type *
+                    Employment Type <span className={styles.requiredMark}>*</span>
                     <select
                       className={styles.input}
                       value={editState.employmentType}
@@ -1800,7 +1800,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Date of Joining *
+                    Date of Joining <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       type="date"
@@ -1830,7 +1830,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Legal & Compliance</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Aadhaar Number *
+                    Aadhaar Number <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.aadhaarNumber}
