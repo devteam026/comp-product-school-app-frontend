@@ -180,6 +180,10 @@ export default function StudentProfileModal({
                 <div className={styles.profileValue}>{student.admissionNumber || "-"}</div>
               </div>
               <div className={styles.profileField}>
+                <span>Register #</span>
+                <div className={styles.profileValue}>{student.registerNo || "-"}</div>
+              </div>
+              <div className={styles.profileField}>
                 <span>Roll #</span>
                 <div className={styles.profileValue}>{student.rollNumber || "-"}</div>
               </div>
