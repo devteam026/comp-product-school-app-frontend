@@ -11,6 +11,8 @@ import HomeDashboard from "./HomeDashboard";
 import EmployeeManagement from "./EmployeeManagement";
 import TimetableManagement from "./TimetableManagement";
 import LeaveManagement from "./LeaveManagement";
+import TransportManagement from "./TransportManagement";
+import HostelManagement from "./HostelManagement";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -20,6 +22,8 @@ const menuItems = [
   "Student Management",
   "Employee Management",
   "Timetable Management",
+  "Transport Management",
+  "Hostel Management",
   "Attendance Management",
   "Fee Management",
   "Leave Management",
@@ -64,7 +68,11 @@ export default function HomeShell({
     }
     if (role !== "admin") {
       items = items.filter(
-        (item) => item !== "Employee Management" && item !== "Timetable Management"
+        (item) =>
+          item !== "Employee Management" &&
+          item !== "Timetable Management" &&
+          item !== "Transport Management" &&
+          item !== "Hostel Management"
       );
     }
     return items;
@@ -175,6 +183,8 @@ export default function HomeShell({
     "Student Management": "Add and track students in one place.",
     "Employee Management": "Manage staff records and documents.",
     "Timetable Management": "Assign teachers to classes and periods.",
+    "Transport Management": "Manage transport routes, vehicles, and drivers.",
+    "Hostel Management": "Manage hostel rooms and allocations.",
     "Attendance Management": "Track daily attendance for each class.",
     "Fee Management": "Manage monthly fees, payments, and reports.",
     "Leave Management": "Apply for leave and manage approvals.",
@@ -228,9 +238,6 @@ export default function HomeShell({
         transportRequired: student.transportRequired ?? false,
         transportRoute: student.transportRoute ?? "",
         transportVehicleNo: student.transportVehicleNo ?? "",
-        hostelRequired: student.hostelRequired ?? false,
-        hostelName: student.hostelName ?? "",
-        hostelRoomNo: student.hostelRoomNo ?? "",
         previousSchoolName: student.previousSchoolName ?? "",
         previousQualification: student.previousQualification ?? "",
         studentPassword: student.studentPassword ?? "",
@@ -246,10 +253,11 @@ export default function HomeShell({
       },
       body: JSON.stringify(payload),
     });
+    const data = response.ok ? await response.json().catch(() => null) : null;
     if (response.ok) {
       fetchStudents(activeClass);
     }
-    return response.ok;
+    return { ok: response.ok, student: data };
   };
 
   useEffect(() => {
@@ -414,6 +422,10 @@ export default function HomeShell({
               activeClassCode={activeClass}
               onSelectClass={(classCode) => setActiveClass(classCode)}
             />
+          ) : activeItem === "Transport Management" ? (
+            <TransportManagement />
+          ) : activeItem === "Hostel Management" ? (
+            <HostelManagement activeClassCode={activeClass} />
           ) : activeItem === "Leave Management" ? (
             <LeaveManagement role={role} />
           ) : activeItem === "Attendance Management" ? (

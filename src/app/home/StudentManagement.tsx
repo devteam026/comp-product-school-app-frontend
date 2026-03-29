@@ -34,7 +34,7 @@ type SortField = (typeof sortFields)[number];
 
 type StudentManagementProps = {
   students: Student[];
-  onAddStudent: (student: Student) => Promise<boolean>;
+  onAddStudent: (student: Student) => Promise<{ ok: boolean; student?: Student | null }>;
   role: string;
   username: string;
   classCode?: string;
@@ -206,6 +206,7 @@ export default function StudentManagement({
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [sessionWarning, setSessionWarning] = useState<string | null>(null);
+  const [hostelSyncError, setHostelSyncError] = useState<string | null>(null);
 
   const [guardianQuery, setGuardianQuery] = useState("");
   const [guardianResults, setGuardianResults] = useState<GuardianInfo[]>([]);
@@ -313,11 +314,18 @@ export default function StudentManagement({
     const token = window.localStorage.getItem("authToken");
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     const hostelParam = activeHostel ? `?hostel=${encodeURIComponent(activeHostel)}` : "";
-    fetch(apiUrl(`/api/student-options/hostels/rooms${hostelParam}`), { headers })
+    const availabilityParam = hostelParam ? `${hostelParam}&onlyAvailable=true` : "?onlyAvailable=true";
+    fetch(apiUrl(`/api/student-options/hostels/rooms${availabilityParam}`), { headers })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setHostelRooms(Array.isArray(data) ? data : []))
       .catch(() => setHostelRooms([]));
   }, [hostelRequired, hostelName, editState?.hostelName, editState?.hostelRequired]);
+
+  useEffect(() => {
+    if (hostelOptions.length > 0) return;
+    if (!hostelRequired) return;
+    // Hostels list is expected from API; if it's empty, data likely not seeded.
+  }, [hostelOptions.length, hostelRequired]);
 
   const hasClassLock = Boolean(classCode && classCode !== "all");
   const parseClassCode = (code: string) => {
@@ -459,6 +467,49 @@ export default function StudentManagement({
     page * pageSize
   );
 
+  const syncHostelAllocation = async (
+    studentId: string,
+    required: boolean,
+    hostel: string,
+    room: string
+  ) => {
+    setHostelSyncError(null);
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    try {
+      if (!required) {
+        const response = await fetch(
+          apiUrl(`/api/hostels/manage/allocations/by-student/${studentId}`),
+          { method: "DELETE", headers }
+        );
+        if (!response.ok && response.status !== 404) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err?.error ?? "Unable to clear hostel allocation");
+        }
+        return;
+      }
+      const response = await fetch(apiUrl("/api/hostels/manage/allocations/by-student"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(headers ?? {}),
+        },
+        body: JSON.stringify({
+          studentId,
+          hostelName: hostel,
+          roomNumber: room,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error ?? "Unable to save hostel allocation");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Hostel sync failed";
+      setHostelSyncError(message);
+    }
+  };
+
   const handleAddStudent = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = name.trim();
@@ -513,7 +564,18 @@ export default function StudentManagement({
       profilePhotoKey: profilePhotoKey ?? undefined,
     };
 
-    await onAddStudent(newStudent);
+    const addResult = await onAddStudent(newStudent);
+    if (addResult.ok) {
+      const studentId = addResult.student?.id ?? newStudent.id;
+      if (hostelRequired || hostelName || hostelRoomNo) {
+        await syncHostelAllocation(
+          studentId,
+          hostelRequired,
+          hostelName.trim(),
+          hostelRoomNo.trim()
+        );
+      }
+    }
     setName("");
     setGrade("");
     setSection("");
@@ -539,6 +601,7 @@ export default function StudentManagement({
     setHostelRequired(false);
     setHostelName("");
     setHostelRoomNo("");
+    setHostelSyncError(null);
     setPreviousSchoolName("");
     setPreviousQualification("");
     setEnableStudentLogin(false);
@@ -634,6 +697,7 @@ export default function StudentManagement({
     setEditPhotoLoading(false);
     setEditSaveStatus("idle");
     setEditSaveMessage(null);
+    setHostelSyncError(null);
     if (student.profilePhotoKey) {
       setEditPhotoLoading(true);
       const token = window.localStorage.getItem("authToken");
@@ -676,8 +740,14 @@ export default function StudentManagement({
     };
     setEditSaveStatus("saving");
     setEditSaveMessage(null);
-    const ok = await onAddStudent(updated);
-    if (ok) {
+    const saveResult = await onAddStudent(updated);
+    if (saveResult.ok) {
+      await syncHostelAllocation(
+        updated.id,
+        editState.hostelRequired,
+        editState.hostelName.trim(),
+        editState.hostelRoomNo.trim()
+      );
       setEditSaveStatus("success");
       setEditSaveMessage("Student updated successfully.");
     } else {
@@ -1316,6 +1386,9 @@ export default function StudentManagement({
                   ))}
                 </select>
               </label>
+              {hostelSyncError ? (
+                <div className={styles.error}>{hostelSyncError}</div>
+              ) : null}
             </div>
           ) : null}
 
