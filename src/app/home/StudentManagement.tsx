@@ -76,6 +76,7 @@ type EditState = {
   transportRequired: boolean;
   transportRoute: string;
   transportVehicleNo: string;
+  transportStopName: string;
   hostelRequired: boolean;
   hostelName: string;
   hostelRoomNo: string;
@@ -107,6 +108,7 @@ const csvHeaders = [
   "transportRequired",
   "transportRoute",
   "transportVehicleNo",
+  "transportStopName",
   "hostelRequired",
   "hostelName",
   "hostelRoomNo",
@@ -170,6 +172,7 @@ export default function StudentManagement({
   const [transportRequired, setTransportRequired] = useState(false);
   const [transportRoute, setTransportRoute] = useState("");
   const [transportVehicleNo, setTransportVehicleNo] = useState("");
+  const [transportStopName, setTransportStopName] = useState("");
   const [hostelRequired, setHostelRequired] = useState(false);
   const [hostelName, setHostelName] = useState("");
   const [hostelRoomNo, setHostelRoomNo] = useState("");
@@ -219,6 +222,7 @@ export default function StudentManagement({
   >([]);
   const [transportRoutes, setTransportRoutes] = useState<string[]>([]);
   const [transportVehicles, setTransportVehicles] = useState<string[]>([]);
+  const [transportStops, setTransportStops] = useState<string[]>([]);
   const [hostelOptions, setHostelOptions] = useState<string[]>([]);
   const [hostelRooms, setHostelRooms] = useState<string[]>([]);
 
@@ -301,6 +305,29 @@ export default function StudentManagement({
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setTransportVehicles(Array.isArray(data) ? data : []))
       .catch(() => setTransportVehicles([]));
+  }, [transportRequired, transportRoute, editState?.transportRoute, editState?.transportRequired]);
+
+  useEffect(() => {
+    const activeRoute = transportRequired
+      ? transportRoute
+      : editState?.transportRoute ?? "";
+    if (!transportRequired && !editState?.transportRequired) {
+      setTransportStops([]);
+      return;
+    }
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    const routeParam = activeRoute ? `?route=${encodeURIComponent(activeRoute)}` : "";
+    fetch(apiUrl(`/api/student-options/transport/stoppages${routeParam}`), { headers })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) =>
+        setTransportStops(
+          Array.isArray(data)
+            ? [...data].sort((a, b) => a.localeCompare(b))
+            : []
+        )
+      )
+      .catch(() => setTransportStops([]));
   }, [transportRequired, transportRoute, editState?.transportRoute, editState?.transportRequired]);
 
   useEffect(() => {
@@ -553,6 +580,7 @@ export default function StudentManagement({
       transportRequired,
       transportRoute: transportRoute.trim(),
       transportVehicleNo: transportVehicleNo.trim(),
+      transportStopName: transportStopName.trim(),
       hostelRequired,
       hostelName: hostelName.trim(),
       hostelRoomNo: hostelRoomNo.trim(),
@@ -598,6 +626,7 @@ export default function StudentManagement({
     setTransportRequired(false);
     setTransportRoute("");
     setTransportVehicleNo("");
+    setTransportStopName("");
     setHostelRequired(false);
     setHostelName("");
     setHostelRoomNo("");
@@ -680,6 +709,7 @@ export default function StudentManagement({
       transportRequired: student.transportRequired ?? false,
       transportRoute: student.transportRoute ?? "",
       transportVehicleNo: student.transportVehicleNo ?? "",
+      transportStopName: student.transportStopName ?? "",
       hostelRequired: student.hostelRequired ?? false,
       hostelName: student.hostelName ?? "",
       hostelRoomNo: student.hostelRoomNo ?? "",
@@ -781,6 +811,7 @@ export default function StudentManagement({
         student.transportRequired ? "Yes" : "No",
         student.transportRoute ?? "",
         student.transportVehicleNo ?? "",
+        student.transportStopName ?? "",
         student.hostelRequired ? "Yes" : "No",
         student.hostelName ?? "",
         student.hostelRoomNo ?? "",
@@ -833,6 +864,7 @@ export default function StudentManagement({
         transportRequired: record.transportRequired === "Yes",
         transportRoute: record.transportRoute ?? "",
         transportVehicleNo: record.transportVehicleNo ?? "",
+        transportStopName: record.transportStopName ?? "",
         hostelRequired: record.hostelRequired === "Yes",
         hostelName: record.hostelName ?? "",
         hostelRoomNo: record.hostelRoomNo ?? "",
@@ -1296,7 +1328,13 @@ export default function StudentManagement({
                 <input
                   type="checkbox"
                   checked={transportRequired}
-                  onChange={(event) => setTransportRequired(event.target.checked)}
+                  onChange={(event) => {
+                    const next = event.target.checked;
+                    setTransportRequired(next);
+                    if (!next) {
+                      setTransportStopName("");
+                    }
+                  }}
                 />
                 Transport Required
               </span>
@@ -1305,33 +1343,17 @@ export default function StudentManagement({
           {transportRequired ? (
             <div className={styles.fieldRow}>
               <label className={styles.label}>
-                Transport Route <span className={styles.requiredMark}>*</span>
+                Transport Stop <span className={styles.requiredMark}>*</span>
                 <select
                   className={styles.input}
-                  value={transportRoute}
-                  onChange={(event) => setTransportRoute(event.target.value)}
+                  value={transportStopName}
+                  onChange={(event) => setTransportStopName(event.target.value)}
                   required
                 >
                   <option value="">Select</option>
-                  {transportRoutes.map((route) => (
-                    <option key={route} value={route}>
-                      {route}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.label}>
-                Vehicle Number <span className={styles.requiredMark}>*</span>
-                <select
-                  className={styles.input}
-                  value={transportVehicleNo}
-                  onChange={(event) => setTransportVehicleNo(event.target.value)}
-                  required
-                >
-                  <option value="">Select</option>
-                  {transportVehicles.map((vehicle) => (
-                    <option key={vehicle} value={vehicle}>
-                      {vehicle}
+                  {transportStops.map((stop) => (
+                    <option key={stop} value={stop}>
+                      {stop}
                     </option>
                   ))}
                 </select>
@@ -1954,6 +1976,12 @@ export default function StudentManagement({
                         setEditState({
                           ...editState,
                           transportRequired: event.target.value === "yes",
+                          transportRoute:
+                            event.target.value === "yes" ? editState.transportRoute : "",
+                          transportVehicleNo:
+                            event.target.value === "yes" ? editState.transportVehicleNo : "",
+                          transportStopName:
+                            event.target.value === "yes" ? editState.transportStopName : "",
                         })
                       }
                     >
@@ -1962,48 +1990,26 @@ export default function StudentManagement({
                     </select>
                   </label>
                   {editState.transportRequired ? (
-                    <>
-                      <label className={styles.label}>
-                        Transport Route <span className={styles.requiredMark}>*</span>
-                        <select
-                          className={styles.input}
-                          value={editState.transportRoute}
-                          onChange={(event) =>
-                            setEditState({
-                              ...editState,
-                              transportRoute: event.target.value,
-                            })
-                          }
-                        >
-                          <option value="">Select</option>
-                          {transportRoutes.map((route) => (
-                            <option key={route} value={route}>
-                              {route}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className={styles.label}>
-                        Vehicle Number <span className={styles.requiredMark}>*</span>
-                        <select
-                          className={styles.input}
-                          value={editState.transportVehicleNo}
-                          onChange={(event) =>
-                            setEditState({
-                              ...editState,
-                              transportVehicleNo: event.target.value,
-                            })
-                          }
-                        >
-                          <option value="">Select</option>
-                          {transportVehicles.map((vehicle) => (
-                            <option key={vehicle} value={vehicle}>
-                              {vehicle}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </>
+                    <label className={styles.label}>
+                      Transport Stop <span className={styles.requiredMark}>*</span>
+                      <select
+                        className={styles.input}
+                        value={editState.transportStopName}
+                        onChange={(event) =>
+                          setEditState({
+                            ...editState,
+                            transportStopName: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">Select</option>
+                        {transportStops.map((stop) => (
+                          <option key={stop} value={stop}>
+                            {stop}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   ) : null}
                   <label className={styles.label}>
                     Hostel Required

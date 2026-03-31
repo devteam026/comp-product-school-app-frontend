@@ -22,6 +22,7 @@ export type Student = {
   transportRequired?: boolean;
   transportRoute?: string;
   transportVehicleNo?: string;
+  transportStopName?: string;
   hostelRequired?: boolean;
   hostelName?: string;
   hostelRoomNo?: string;

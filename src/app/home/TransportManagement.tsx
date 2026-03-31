@@ -48,6 +48,8 @@ type TransportStoppage = {
   stopName: string;
   checkInTime: string;
   checkOutTime: string;
+  feeAmount?: number;
+  distanceKm?: number;
   active: boolean;
 };
 
@@ -89,6 +91,7 @@ type TransportStudentRow = {
   name: string;
   classCode: string;
   registerNo?: string;
+  stopName?: string;
 };
 
 export default function TransportManagement() {
@@ -108,6 +111,7 @@ export default function TransportManagement() {
   const [summaryStudents, setSummaryStudents] = useState<TransportStudentRow[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryStoppages, setSummaryStoppages] = useState<TransportStoppage[]>([]);
+  const [summaryStudentSearch, setSummaryStudentSearch] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [routeForm, setRouteForm] = useState({ id: 0, name: "", active: true });
@@ -149,6 +153,8 @@ export default function TransportManagement() {
     stopName: "",
     checkInTime: "",
     checkOutTime: "",
+    feeAmount: 0,
+    distanceKm: 0,
     active: true,
   });
   const [assignmentForm, setAssignmentForm] = useState({
@@ -363,6 +369,7 @@ export default function TransportManagement() {
                             className={styles.rowClickable}
                             onClick={() => {
                               setSelectedSummary(row);
+                              setSummaryStudentSearch("");
                               setSummaryStudents([]);
                               setSummaryStoppages(
                                 stoppages.filter((stop) => stop.routeName === row.routeName)
@@ -407,6 +414,14 @@ export default function TransportManagement() {
                         <p className={styles.modalSubtitle}>
                           Vehicle {selectedSummary.vehicleNo}
                         </p>
+                        {typeof selectedSummary.capacity === "number" &&
+                        selectedSummary.capacity > 0 &&
+                        selectedSummary.studentCount > selectedSummary.capacity ? (
+                          <p className={styles.error}>
+                            Capacity exceeded by{" "}
+                            {selectedSummary.studentCount - selectedSummary.capacity} students.
+                          </p>
+                        ) : null}
                       </div>
                       <button
                         className={styles.inlineButton}
@@ -429,6 +444,7 @@ export default function TransportManagement() {
                                   <tr>
                                     <th>#</th>
                                     <th>Stop</th>
+                                    <th>Amount</th>
                                     <th>Check-in</th>
                                     <th>Check-out</th>
                                   </tr>
@@ -438,6 +454,7 @@ export default function TransportManagement() {
                                     <tr key={stop.id}>
                                       <td>{index + 1}</td>
                                       <td>{stop.stopName}</td>
+                                      <td>{stop.feeAmount ?? "-"}</td>
                                       <td>{stop.checkInTime}</td>
                                       <td>{stop.checkOutTime}</td>
                                     </tr>
@@ -449,6 +466,15 @@ export default function TransportManagement() {
                         </div>
                         <div>
                           <div className={styles.sectionTitle}>Students</div>
+                          <div className={styles.listToolbar}>
+                            <input
+                              className={styles.searchInput}
+                              type="search"
+                              placeholder="Search student, class, stop..."
+                              value={summaryStudentSearch}
+                              onChange={(event) => setSummaryStudentSearch(event.target.value)}
+                            />
+                          </div>
                           {summaryLoading ? (
                             <div className={styles.loading}>Loading students...</div>
                           ) : summaryStudents.length === 0 ? (
@@ -461,15 +487,27 @@ export default function TransportManagement() {
                                     <th>#</th>
                                     <th>Name</th>
                                     <th>Class</th>
+                                    <th>Stop</th>
                                     <th>Register #</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {summaryStudents.map((student, index) => (
+                                  {summaryStudents
+                                    .filter((student) => {
+                                      const query = summaryStudentSearch.trim().toLowerCase();
+                                      if (!query) return true;
+                                      return (
+                                        student.name.toLowerCase().includes(query) ||
+                                        student.classCode.toLowerCase().includes(query) ||
+                                        (student.stopName ?? "").toLowerCase().includes(query)
+                                      );
+                                    })
+                                    .map((student, index) => (
                                     <tr key={student.id}>
                                       <td>{index + 1}</td>
                                       <td>{student.name}</td>
                                       <td>{student.classCode}</td>
+                                      <td>{student.stopName || "-"}</td>
                                       <td>{student.registerNo || "-"}</td>
                                     </tr>
                                   ))}
@@ -1151,6 +1189,34 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
+                  Amount
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={stoppageForm.feeAmount}
+                    onChange={(event) =>
+                      setStoppageForm({
+                        ...stoppageForm,
+                        feeAmount: Number(event.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label className={styles.label}>
+                  Distance (KM)
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={stoppageForm.distanceKm}
+                    onChange={(event) =>
+                      setStoppageForm({
+                        ...stoppageForm,
+                        distanceKm: Number(event.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label className={styles.label}>
                   Active
                   <select
                     className={styles.input}
@@ -1184,6 +1250,8 @@ export default function TransportManagement() {
                       stopName: "",
                       checkInTime: "",
                       checkOutTime: "",
+                      feeAmount: 0,
+                      distanceKm: 0,
                       active: true,
                     })
                   )
@@ -1200,6 +1268,8 @@ export default function TransportManagement() {
                       <th>Stop</th>
                       <th>Check-in</th>
                       <th>Check-out</th>
+                      <th>Amount</th>
+                      <th>Distance</th>
                       <th>Status</th>
                       <th>Action</th>
                     </tr>
@@ -1212,6 +1282,8 @@ export default function TransportManagement() {
                         <td>{stop.stopName}</td>
                         <td>{stop.checkInTime}</td>
                         <td>{stop.checkOutTime}</td>
+                        <td>{stop.feeAmount ?? "-"}</td>
+                        <td>{stop.distanceKm ?? "-"}</td>
                         <td>{stop.active ? "Active" : "Inactive"}</td>
                         <td className={styles.actionRow}>
                           <button

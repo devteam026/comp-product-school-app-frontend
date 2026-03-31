@@ -63,7 +63,7 @@ export default function HomeShell({
   const role = displayRole.toLowerCase();
   const navItems = useMemo(() => {
     let items = menuItems;
-    if (role === "teacher") {
+    if (role !== "admin" && role !== "accountant") {
       items = items.filter((item) => item !== "Fee Management");
     }
     if (role !== "admin") {
@@ -238,6 +238,7 @@ export default function HomeShell({
         transportRequired: student.transportRequired ?? false,
         transportRoute: student.transportRoute ?? "",
         transportVehicleNo: student.transportVehicleNo ?? "",
+        transportStopName: student.transportStopName ?? "",
         previousSchoolName: student.previousSchoolName ?? "",
         previousQualification: student.previousQualification ?? "",
         studentPassword: student.studentPassword ?? "",
