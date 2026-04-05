@@ -185,6 +185,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
   });
 
   const [message, setMessage] = useState<string | null>(null);
+  const [feeLoading, setFeeLoading] = useState(false);
   const token = typeof window !== "undefined" ? window.localStorage.getItem("authToken") : null;
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
@@ -204,36 +205,41 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
   };
 
   const loadAll = async () => {
-    const [
-      typesData,
-      structuresData,
-      duesData,
-      defaultDiscountData,
-      studentDiscountData,
-      fineRulesData,
-      paymentsData,
-      classData,
-      studentData,
-    ] = await Promise.all([
-      fetchJson("/api/fees/types"),
-      fetchJson("/api/fees/structures"),
-      fetchJson("/api/fees/dues"),
-      fetchJson("/api/fees/discounts/default"),
-      fetchJson("/api/fees/discounts/student"),
-      fetchJson("/api/fees/fines"),
-      fetchJson("/api/fees/payments"),
-      fetchJson("/api/classes/manage"),
-      fetchJson("/api/students"),
-    ]);
-    setFeeTypes(Array.isArray(typesData) ? typesData : []);
-    setFeeStructures(Array.isArray(structuresData) ? structuresData : []);
-    setFeeDues(Array.isArray(duesData) ? duesData : []);
-    setDefaultDiscounts(Array.isArray(defaultDiscountData) ? defaultDiscountData : []);
-    setStudentDiscounts(Array.isArray(studentDiscountData) ? studentDiscountData : []);
-    setFineRules(Array.isArray(fineRulesData) ? fineRulesData : []);
-    setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-    setClassOptions(Array.isArray(classData) ? classData : []);
-    setFeeStudents(Array.isArray(studentData) ? studentData : []);
+    setFeeLoading(true);
+    try {
+      const [
+        typesData,
+        structuresData,
+        duesData,
+        defaultDiscountData,
+        studentDiscountData,
+        fineRulesData,
+        paymentsData,
+        classData,
+        studentData,
+      ] = await Promise.all([
+        fetchJson("/api/fees/types"),
+        fetchJson("/api/fees/structures"),
+        fetchJson("/api/fees/dues"),
+        fetchJson("/api/fees/discounts/default"),
+        fetchJson("/api/fees/discounts/student"),
+        fetchJson("/api/fees/fines"),
+        fetchJson("/api/fees/payments"),
+        fetchJson("/api/classes/manage"),
+        fetchJson("/api/students"),
+      ]);
+      setFeeTypes(Array.isArray(typesData) ? typesData : []);
+      setFeeStructures(Array.isArray(structuresData) ? structuresData : []);
+      setFeeDues(Array.isArray(duesData) ? duesData : []);
+      setDefaultDiscounts(Array.isArray(defaultDiscountData) ? defaultDiscountData : []);
+      setStudentDiscounts(Array.isArray(studentDiscountData) ? studentDiscountData : []);
+      setFineRules(Array.isArray(fineRulesData) ? fineRulesData : []);
+      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      setClassOptions(Array.isArray(classData) ? classData : []);
+      setFeeStudents(Array.isArray(studentData) ? studentData : []);
+    } finally {
+      setFeeLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -410,54 +416,63 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
         ))}
       </div>
 
-      {isLoading ? <div className={styles.loadingText}>Loading...</div> : null}
-      {message ? <div className={styles.success}>{message}</div> : null}
+      {isLoading || feeLoading ? (
+        <div className={styles.loadingCard}>
+          <div className={styles.skeletonTitle} />
+          <div className={styles.skeletonLine} />
+          <div className={styles.skeletonLine} />
+        </div>
+      ) : (
+        <>
+          {message ? <div className={styles.success}>{message}</div> : null}
 
-      {activeTab === "Fee Types" ? (
-        <div className={styles.sectionCard}>
-          <div className={styles.sectionTitle}>Fee Types</div>
-          <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              Name
-              <input
-                className={styles.input}
-                value={feeTypeForm.name}
-                onChange={(event) => setFeeTypeForm({ ...feeTypeForm, name: event.target.value })}
-              />
-            </label>
-            <label className={styles.label}>
-              Active
-              <select
-                className={styles.input}
-                value={feeTypeForm.active ? "Yes" : "No"}
-                onChange={(event) =>
-                  setFeeTypeForm({ ...feeTypeForm, active: event.target.value === "Yes" })
+          {activeTab === "Fee Types" ? (
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionTitle}>Fee Types</div>
+              <div className={styles.fieldRow}>
+                <label className={styles.label}>
+                  Name
+                  <input
+                    className={styles.input}
+                    value={feeTypeForm.name}
+                    onChange={(event) =>
+                      setFeeTypeForm({ ...feeTypeForm, name: event.target.value })
+                    }
+                  />
+                </label>
+                <label className={styles.label}>
+                  Active
+                  <select
+                    className={styles.input}
+                    value={feeTypeForm.active ? "Yes" : "No"}
+                    onChange={(event) =>
+                      setFeeTypeForm({ ...feeTypeForm, active: event.target.value === "Yes" })
+                    }
+                  >
+                    <option>Yes</option>
+                    <option>No</option>
+                  </select>
+                </label>
+              </div>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() =>
+                  saveEntity(
+                    feeTypeForm.id ? `/api/fees/types/${feeTypeForm.id}` : "/api/fees/types",
+                    feeTypeForm.id ? "PUT" : "POST",
+                    feeTypeForm
+                  ).then(() => setFeeTypeForm({ id: 0, name: "", active: true }))
                 }
               >
-                <option>Yes</option>
-                <option>No</option>
-              </select>
-            </label>
-          </div>
-          <button
-            className={styles.button}
-            type="button"
-            onClick={() =>
-              saveEntity(
-                feeTypeForm.id ? `/api/fees/types/${feeTypeForm.id}` : "/api/fees/types",
-                feeTypeForm.id ? "PUT" : "POST",
-                feeTypeForm
-              ).then(() => setFeeTypeForm({ id: 0, name: "", active: true }))
-            }
-          >
-            {feeTypeForm.id ? "Update Type" : "Save Type"}
-          </button>
-          <div className={styles.tableResponsive}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
+                {feeTypeForm.id ? "Update Type" : "Save Type"}
+              </button>
+              <div className={styles.tableResponsive}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Name</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -1412,6 +1427,8 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
           </div>
         </div>
       ) : null}
+        </>
+      )}
     </div>
   );
 }

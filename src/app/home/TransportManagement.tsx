@@ -217,6 +217,30 @@ export default function TransportManagement() {
       ),
     [transportEmployees]
   );
+  const filteredSummaryStudents = useMemo(() => {
+    const query = summaryStudentSearch.trim().toLowerCase();
+    if (!query) return summaryStudents;
+    return summaryStudents.filter((student) => {
+      return (
+        student.name.toLowerCase().includes(query) ||
+        student.classCode.toLowerCase().includes(query) ||
+        (student.stopName ?? "").toLowerCase().includes(query)
+      );
+    });
+  }, [summaryStudents, summaryStudentSearch]);
+  const groupedSummaryStudents = useMemo(() => {
+    const grouped = new Map<string, TransportStudentRow[]>();
+    filteredSummaryStudents.forEach((student) => {
+      const key = (student.stopName || "Unassigned").trim() || "Unassigned";
+      const bucket = grouped.get(key);
+      if (bucket) {
+        bucket.push(student);
+      } else {
+        grouped.set(key, [student]);
+      }
+    });
+    return grouped;
+  }, [filteredSummaryStudents]);
   const saveEntity = async (
     url: string,
     method: "POST" | "PUT",
@@ -447,18 +471,41 @@ export default function TransportManagement() {
                                     <th>Amount</th>
                                     <th>Check-in</th>
                                     <th>Check-out</th>
+                                    <th>Students</th>
+                                    <th>Free Seats</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {summaryStoppages.map((stop, index) => (
-                                    <tr key={stop.id}>
+                                  {summaryStoppages.map((stop, index) => {
+                                    const studentsAtStop = summaryStudents.filter(
+                                      (student) =>
+                                        (student.stopName || "").toLowerCase() ===
+                                        stop.stopName.toLowerCase()
+                                    );
+                                    const capacity = selectedSummary.capacity ?? 0;
+                                    const freeSeats =
+                                      capacity > 0 ? capacity - studentsAtStop.length : null;
+                                    const overCapacity =
+                                      typeof freeSeats === "number" && freeSeats < 0;
+                                    return (
+                                      <tr key={stop.id}>
                                       <td>{index + 1}</td>
                                       <td>{stop.stopName}</td>
                                       <td>{stop.feeAmount ?? "-"}</td>
                                       <td>{stop.checkInTime}</td>
                                       <td>{stop.checkOutTime}</td>
+                                      <td>{studentsAtStop.length}</td>
+                                      <td>
+                                        {freeSeats === null ? "-" : freeSeats}
+                                        {overCapacity ? (
+                                          <div className={styles.error}>
+                                            Over by {Math.abs(freeSeats ?? 0)}
+                                          </div>
+                                        ) : null}
+                                      </td>
                                     </tr>
-                                  ))}
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -480,39 +527,38 @@ export default function TransportManagement() {
                           ) : summaryStudents.length === 0 ? (
                             <div className={styles.empty}>No students assigned.</div>
                           ) : (
-                            <div className={styles.tableResponsive}>
-                              <table className={styles.table}>
-                                <thead>
-                                  <tr>
-                                    <th>#</th>
-                                    <th>Name</th>
-                                    <th>Class</th>
-                                    <th>Stop</th>
-                                    <th>Register #</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {summaryStudents
-                                    .filter((student) => {
-                                      const query = summaryStudentSearch.trim().toLowerCase();
-                                      if (!query) return true;
-                                      return (
-                                        student.name.toLowerCase().includes(query) ||
-                                        student.classCode.toLowerCase().includes(query) ||
-                                        (student.stopName ?? "").toLowerCase().includes(query)
-                                      );
-                                    })
-                                    .map((student, index) => (
-                                    <tr key={student.id}>
-                                      <td>{index + 1}</td>
-                                      <td>{student.name}</td>
-                                      <td>{student.classCode}</td>
-                                      <td>{student.stopName || "-"}</td>
-                                      <td>{student.registerNo || "-"}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                            <div>
+                              {Array.from(groupedSummaryStudents.entries()).map(
+                                ([stopName, students]) => (
+                                  <div key={stopName} className={styles.sectionSpacing}>
+                                    <div className={styles.sectionTitle}>
+                                      {stopName} ({students.length})
+                                    </div>
+                                    <div className={styles.tableResponsive}>
+                                      <table className={styles.table}>
+                                        <thead>
+                                          <tr>
+                                            <th>#</th>
+                                            <th>Name</th>
+                                            <th>Class</th>
+                                            <th>Register #</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {students.map((student, index) => (
+                                            <tr key={student.id}>
+                                              <td>{index + 1}</td>
+                                              <td>{student.name}</td>
+                                              <td>{student.classCode}</td>
+                                              <td>{student.registerNo || "-"}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )
+                              )}
                             </div>
                           )}
                         </div>

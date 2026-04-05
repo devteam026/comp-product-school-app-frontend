@@ -225,6 +225,20 @@ export default function StudentManagement({
   const [transportStops, setTransportStops] = useState<string[]>([]);
   const [hostelOptions, setHostelOptions] = useState<string[]>([]);
   const [hostelRooms, setHostelRooms] = useState<string[]>([]);
+  const transportStopOptions = useMemo(() => {
+    const options = [...transportStops];
+    if (transportStopName && !options.includes(transportStopName)) {
+      options.unshift(transportStopName);
+    }
+    return options;
+  }, [transportStops, transportStopName]);
+  const editTransportStopOptions = useMemo(() => {
+    const options = [...transportStops];
+    if (editState?.transportStopName && !options.includes(editState.transportStopName)) {
+      options.unshift(editState.transportStopName);
+    }
+    return options;
+  }, [transportStops, editState?.transportStopName]);
 
   useEffect(() => {
     if (!selectedStudent && !editState) return;
@@ -1351,7 +1365,7 @@ export default function StudentManagement({
                   required
                 >
                   <option value="">Select</option>
-                  {transportStops.map((stop) => (
+                  {transportStopOptions.map((stop) => (
                     <option key={stop} value={stop}>
                       {stop}
                     </option>
@@ -2003,7 +2017,7 @@ export default function StudentManagement({
                         }
                       >
                         <option value="">Select</option>
-                        {transportStops.map((stop) => (
+                        {editTransportStopOptions.map((stop) => (
                           <option key={stop} value={stop}>
                             {stop}
                           </option>
