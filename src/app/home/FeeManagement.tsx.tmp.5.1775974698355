@@ -187,7 +187,6 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [feeLoading, setFeeLoading] = useState(false);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const showMessage = (text: string, type: "success" | "error" = "success") => {
     setMessage(text);
@@ -285,7 +284,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
   };
 
   const handlePayment = async () => {
-    setSavingKey("payment");
+    setMessage(null);
     try {
       await saveEntity("/api/fees/payments", "POST", paymentForm);
       setPaymentForm({
@@ -297,12 +296,10 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
         extraDiscountReason: "",
         approvedBy: "",
       });
-      showMessage("Payment recorded successfully.");
+      setMessage("Payment recorded.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unable to record payment";
-      showMessage(msg, "error");
-    } finally {
-      setSavingKey(null);
+      setMessage(msg);
     }
   };
 
@@ -383,113 +380,24 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
   };
 
   const handleGenerateDues = async () => {
-    setSavingKey("generateDues");
+    setMessage(null);
     try {
       await saveEntity("/api/fees/dues/generate", "POST", generateForm);
-      showMessage("Dues generated successfully.");
+      setMessage("Dues generated.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unable to generate dues";
-      showMessage(msg, "error");
-    } finally {
-      setSavingKey(null);
+      setMessage(msg);
     }
   };
 
   const handleRegenerateDues = async () => {
-    setSavingKey("regenerateDues");
+    setMessage(null);
     try {
       await saveEntity("/api/fees/dues/regenerate", "POST", generateForm);
-      showMessage("Dues regenerated successfully (unpaid only).");
+      setMessage("Dues regenerated (unpaid only).");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unable to regenerate dues";
-      showMessage(msg, "error");
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
-  const handleSaveFeeType = async () => {
-    setSavingKey("feeType");
-    try {
-      await saveEntity(
-        feeTypeForm.id ? `/api/fees/types/${feeTypeForm.id}` : "/api/fees/types",
-        feeTypeForm.id ? "PUT" : "POST",
-        feeTypeForm as unknown as Record<string, unknown>
-      );
-      setFeeTypeForm({ id: 0, name: "", active: true });
-      showMessage(feeTypeForm.id ? "Fee type updated." : "Fee type saved.");
-    } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save fee type.", "error");
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
-  const handleSaveFeeStructure = async () => {
-    setSavingKey("feeStructure");
-    try {
-      await saveEntity(
-        feeStructureForm.id ? `/api/fees/structures/${feeStructureForm.id}` : "/api/fees/structures",
-        feeStructureForm.id ? "PUT" : "POST",
-        feeStructureForm as unknown as Record<string, unknown>
-      );
-      setFeeStructureForm({ id: 0, classCode: "", feeTypeId: 0, amount: 0, frequency: "MONTHLY", academicYear: "", effectiveFrom: "", dueDay: 1, active: true });
-      showMessage(feeStructureForm.id ? "Fee structure updated." : "Fee structure saved.");
-    } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save fee structure.", "error");
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
-  const handleSaveDefaultDiscount = async () => {
-    setSavingKey("defaultDiscount");
-    try {
-      await saveEntity(
-        defaultDiscountForm.id ? `/api/fees/discounts/default/${defaultDiscountForm.id}` : "/api/fees/discounts/default",
-        defaultDiscountForm.id ? "PUT" : "POST",
-        defaultDiscountForm as unknown as Record<string, unknown>
-      );
-      setDefaultDiscountForm({ id: 0, name: "", discountType: "PERCENTAGE", value: "", applicableOn: "ALL", active: true });
-      showMessage(defaultDiscountForm.id ? "Discount updated." : "Discount saved.");
-    } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save discount.", "error");
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
-  const handleSaveStudentDiscount = async () => {
-    setSavingKey("studentDiscount");
-    try {
-      await saveEntity(
-        studentDiscountForm.id ? `/api/fees/discounts/student/${studentDiscountForm.id}` : "/api/fees/discounts/student",
-        studentDiscountForm.id ? "PUT" : "POST",
-        studentDiscountForm as unknown as Record<string, unknown>
-      );
-      setStudentDiscountForm({ id: 0, studentId: "", discountId: 0, startDate: "", endDate: "", active: true });
-      showMessage(studentDiscountForm.id ? "Student discount updated." : "Student discount saved.");
-    } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save student discount.", "error");
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
-  const handleSaveFineRule = async () => {
-    setSavingKey("fineRule");
-    try {
-      await saveEntity(
-        fineRuleForm.id ? `/api/fees/fines/${fineRuleForm.id}` : "/api/fees/fines",
-        fineRuleForm.id ? "PUT" : "POST",
-        fineRuleForm as unknown as Record<string, unknown>
-      );
-      setFineRuleForm({ id: 0, daysFrom: 0, daysTo: 0, fineType: "PER_DAY", value: "", active: true });
-      showMessage(fineRuleForm.id ? "Fine rule updated." : "Fine rule saved.");
-    } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save fine rule.", "error");
-    } finally {
-      setSavingKey(null);
+      setMessage(msg);
     }
   };
 
@@ -500,53 +408,6 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
       return true;
     });
   }, [feeDues, dueFilters]);
-
-  // Dues for the student currently selected in the payment form
-  const studentPendingDues = useMemo(() => {
-    if (!paymentForm.studentId) return [];
-    return feeDues.filter(
-      (due) => due.studentId === paymentForm.studentId && due.status !== "PAID"
-    );
-  }, [feeDues, paymentForm.studentId]);
-
-  const studentTotalRemaining = useMemo(() => {
-    return studentPendingDues
-      .reduce((sum, due) => sum + parseFloat(due.remainingAmount || "0"), 0)
-      .toFixed(2);
-  }, [studentPendingDues]);
-
-  // Group pending dues by calendar month, sorted chronologically
-  const duesByMonth = useMemo(() => {
-    const map = new Map<string, { label: string; dues: typeof studentPendingDues; monthTotal: string }>();
-    for (const due of studentPendingDues) {
-      // dueDate is "YYYY-MM-DD" — extract the "YYYY-MM" key
-      const key = due.dueDate ? due.dueDate.slice(0, 7) : "Unknown";
-      if (!map.has(key)) {
-        // Build a readable label like "April 2026"
-        let label = key;
-        try {
-          const [year, month] = key.split("-");
-          label = new Date(Number(year), Number(month) - 1, 1).toLocaleString("default", {
-            month: "long",
-            year: "numeric",
-          });
-        } catch {
-          // fallback to raw key
-        }
-        map.set(key, { label, dues: [], monthTotal: "0.00" });
-      }
-      map.get(key)!.dues.push(due);
-    }
-    // Compute per-month totals and sort months chronologically
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, group]) => ({
-        ...group,
-        monthTotal: group.dues
-          .reduce((sum, d) => sum + parseFloat(d.remainingAmount || "0"), 0)
-          .toFixed(2),
-      }));
-  }, [studentPendingDues]);
 
   return (
     <div>
@@ -570,11 +431,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
         </div>
       ) : (
         <>
-          {message ? (
-            <div className={messageType === "error" ? styles.error : styles.saveMessage}>
-              {message}
-            </div>
-          ) : null}
+          {message ? <div className={styles.success}>{message}</div> : null}
 
           {activeTab === "Fee Types" ? (
             <div className={styles.sectionCard}>
@@ -605,14 +462,17 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 </label>
               </div>
               <button
-                className={`${styles.button} ${savingKey === "feeType" ? styles.buttonLoading : ""}`}
+                className={styles.button}
                 type="button"
-                disabled={savingKey === "feeType"}
-                onClick={handleSaveFeeType}
+                onClick={() =>
+                  saveEntity(
+                    feeTypeForm.id ? `/api/fees/types/${feeTypeForm.id}` : "/api/fees/types",
+                    feeTypeForm.id ? "PUT" : "POST",
+                    feeTypeForm
+                  ).then(() => setFeeTypeForm({ id: 0, name: "", active: true }))
+                }
               >
-                {savingKey === "feeType"
-                  ? feeTypeForm.id ? "Updating…" : "Saving…"
-                  : feeTypeForm.id ? "Update Type" : "Save Type"}
+                {feeTypeForm.id ? "Update Type" : "Save Type"}
               </button>
               <div className={styles.tableResponsive}>
                 <table className={styles.table}>
@@ -786,14 +646,31 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
             </label>
           </div>
           <button
-            className={`${styles.button} ${savingKey === "feeStructure" ? styles.buttonLoading : ""}`}
+            className={styles.button}
             type="button"
-            disabled={savingKey === "feeStructure"}
-            onClick={handleSaveFeeStructure}
+            onClick={() =>
+              saveEntity(
+                feeStructureForm.id
+                  ? `/api/fees/structures/${feeStructureForm.id}`
+                  : "/api/fees/structures",
+                feeStructureForm.id ? "PUT" : "POST",
+                feeStructureForm
+              ).then(() =>
+                setFeeStructureForm({
+                  id: 0,
+                  classCode: "",
+                  feeTypeId: 0,
+                  amount: 0,
+                  frequency: "MONTHLY",
+                  academicYear: "",
+                  effectiveFrom: "",
+                  dueDay: 1,
+                  active: true,
+                })
+              )
+            }
           >
-            {savingKey === "feeStructure"
-              ? feeStructureForm.id ? "Updating…" : "Saving…"
-              : feeStructureForm.id ? "Update Structure" : "Save Structure"}
+            {feeStructureForm.id ? "Update Structure" : "Save Structure"}
           </button>
           <div className={styles.tableResponsive}>
             <table className={styles.table}>
@@ -905,21 +782,11 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
             </label>
           </div>
           <div className={styles.formActions}>
-            <button
-              className={`${styles.button} ${savingKey === "generateDues" ? styles.buttonLoading : ""}`}
-              type="button"
-              disabled={savingKey === "generateDues" || savingKey === "regenerateDues"}
-              onClick={handleGenerateDues}
-            >
-              {savingKey === "generateDues" ? "Generating…" : "Generate Dues"}
+            <button className={styles.button} type="button" onClick={handleGenerateDues}>
+              Generate Dues
             </button>
-            <button
-              className={`${styles.button} ${savingKey === "regenerateDues" ? styles.buttonLoading : ""}`}
-              type="button"
-              disabled={savingKey === "generateDues" || savingKey === "regenerateDues"}
-              onClick={handleRegenerateDues}
-            >
-              {savingKey === "regenerateDues" ? "Regenerating…" : "Regenerate Dues (Unpaid Only)"}
+            <button className={styles.button} type="button" onClick={handleRegenerateDues}>
+              Regenerate Dues (Unpaid Only)
             </button>
           </div>
 
@@ -935,7 +802,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 }
               >
                 <option value="">All</option>
-                {(feeStudents.length ? feeStudents : students).map((student) => (
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
                   </option>
@@ -990,8 +857,6 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
       {activeTab === "Payments" ? (
         <div className={styles.sectionCard}>
           <div className={styles.sectionTitle}>Record Payment</div>
-
-          {/* Row 1: Student picker */}
           <div className={styles.fieldRow}>
             <label className={styles.label}>
               Student
@@ -999,102 +864,22 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 className={styles.input}
                 value={paymentForm.studentId}
                 onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, studentId: event.target.value, paidAmount: "" })
+                  setPaymentForm({ ...paymentForm, studentId: event.target.value })
                 }
               >
-                <option value="">Select student</option>
-                {(feeStudents.length ? feeStudents : students).map((student) => (
+                <option value="">Select</option>
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
                   </option>
                 ))}
               </select>
             </label>
-          </div>
-
-          {/* Due summary — shown once a student is selected */}
-          {paymentForm.studentId ? (
-            studentPendingDues.length === 0 ? (
-              <div className={styles.dueSummaryEmpty}>
-                ✓ No outstanding dues for this student.
-              </div>
-            ) : (
-              <div className={styles.dueSummaryCard}>
-                {/* Overall total + Pay All */}
-                <div className={styles.dueSummaryHeader}>
-                  <div>
-                    <div className={styles.dueSummaryLabel}>Total Outstanding</div>
-                    <div className={styles.dueSummaryTotal}>₹ {studentTotalRemaining}</div>
-                  </div>
-                  <button
-                    className={styles.payAllButton}
-                    type="button"
-                    onClick={() => setPaymentForm({ ...paymentForm, paidAmount: studentTotalRemaining })}
-                  >
-                    Pay All
-                  </button>
-                </div>
-
-                {/* One block per month */}
-                {duesByMonth.map((group) => (
-                  <div key={group.label} className={styles.monthGroup}>
-                    <div className={styles.monthGroupHeader}>
-                      <span className={styles.monthGroupLabel}>{group.label}</span>
-                      <span className={styles.monthGroupTotal}>₹ {group.monthTotal}</span>
-                      <button
-                        className={styles.payMonthButton}
-                        type="button"
-                        onClick={() => setPaymentForm({ ...paymentForm, paidAmount: group.monthTotal })}
-                      >
-                        Pay this month
-                      </button>
-                    </div>
-                    <div className={styles.tableResponsive}>
-                      <table className={styles.table}>
-                        <thead>
-                          <tr>
-                            <th>Fee Type</th>
-                            <th>Due Date</th>
-                            <th>Original</th>
-                            <th>Remaining</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.dues.map((due) => (
-                            <tr key={due.id}>
-                              <td>{feeTypeMap.get(due.feeTypeId)?.name ?? `Type ${due.feeTypeId}`}</td>
-                              <td>{due.dueDate}</td>
-                              <td>₹ {parseFloat(due.amount).toFixed(2)}</td>
-                              <td>₹ {parseFloat(due.remainingAmount).toFixed(2)}</td>
-                              <td>
-                                <span className={
-                                  due.status === "UNPAID" ? styles.badgeUnpaid :
-                                  due.status === "PARTIAL" ? styles.badgePartial :
-                                  styles.badgePaid
-                                }>
-                                  {due.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )
-          ) : null}
-
-          {/* Row 2: Amount, date, mode */}
-          <div className={styles.fieldRow}>
             <label className={styles.label}>
               Paid Amount
               <input
                 className={styles.input}
                 type="number"
-                placeholder="Enter amount"
                 value={paymentForm.paidAmount}
                 onChange={(event) =>
                   setPaymentForm({ ...paymentForm, paidAmount: event.target.value })
@@ -1127,8 +912,6 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
               </select>
             </label>
           </div>
-
-          {/* Row 3: Extra discount fields */}
           <div className={styles.fieldRow}>
             <label className={styles.label}>
               Extra Discount
@@ -1162,14 +945,8 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
               />
             </label>
           </div>
-
-          <button
-            className={`${styles.button} ${savingKey === "payment" ? styles.buttonLoading : ""}`}
-            type="button"
-            disabled={savingKey === "payment" || studentPendingDues.length === 0}
-            onClick={handlePayment}
-          >
-            {savingKey === "payment" ? "Recording…" : "Record Payment"}
+          <button className={styles.button} type="button" onClick={handlePayment}>
+            Record Payment
           </button>
 
           <div className={styles.sectionTitle}>Payments</div>
@@ -1298,14 +1075,28 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
             </label>
           </div>
           <button
-            className={`${styles.button} ${savingKey === "defaultDiscount" ? styles.buttonLoading : ""}`}
+            className={styles.button}
             type="button"
-            disabled={savingKey === "defaultDiscount"}
-            onClick={handleSaveDefaultDiscount}
+            onClick={() =>
+              saveEntity(
+                defaultDiscountForm.id
+                  ? `/api/fees/discounts/default/${defaultDiscountForm.id}`
+                  : "/api/fees/discounts/default",
+                defaultDiscountForm.id ? "PUT" : "POST",
+                defaultDiscountForm
+              ).then(() =>
+                setDefaultDiscountForm({
+                  id: 0,
+                  name: "",
+                  discountType: "PERCENTAGE",
+                  value: "",
+                  applicableOn: "ALL",
+                  active: true,
+                })
+              )
+            }
           >
-            {savingKey === "defaultDiscount"
-              ? defaultDiscountForm.id ? "Updating…" : "Saving…"
-              : defaultDiscountForm.id ? "Update Discount" : "Save Discount"}
+            {defaultDiscountForm.id ? "Update Discount" : "Save Discount"}
           </button>
 
           <div className={styles.tableResponsive}>
@@ -1366,7 +1157,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 }
               >
                 <option value="">Select</option>
-                {(feeStudents.length ? feeStudents : students).map((student) => (
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
                   </option>
@@ -1435,14 +1226,28 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
             </label>
           </div>
           <button
-            className={`${styles.button} ${savingKey === "studentDiscount" ? styles.buttonLoading : ""}`}
+            className={styles.button}
             type="button"
-            disabled={savingKey === "studentDiscount"}
-            onClick={handleSaveStudentDiscount}
+            onClick={() =>
+              saveEntity(
+                studentDiscountForm.id
+                  ? `/api/fees/discounts/student/${studentDiscountForm.id}`
+                  : "/api/fees/discounts/student",
+                studentDiscountForm.id ? "PUT" : "POST",
+                studentDiscountForm
+              ).then(() =>
+                setStudentDiscountForm({
+                  id: 0,
+                  studentId: "",
+                  discountId: 0,
+                  startDate: "",
+                  endDate: "",
+                  active: true,
+                })
+              )
+            }
           >
-            {savingKey === "studentDiscount"
-              ? studentDiscountForm.id ? "Updating…" : "Saving…"
-              : studentDiscountForm.id ? "Update Student Discount" : "Save Student Discount"}
+            {studentDiscountForm.id ? "Update Student Discount" : "Save Student Discount"}
           </button>
 
           <div className={styles.tableResponsive}>
@@ -1564,14 +1369,26 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
             </label>
           </div>
           <button
-            className={`${styles.button} ${savingKey === "fineRule" ? styles.buttonLoading : ""}`}
+            className={styles.button}
             type="button"
-            disabled={savingKey === "fineRule"}
-            onClick={handleSaveFineRule}
+            onClick={() =>
+              saveEntity(
+                fineRuleForm.id ? `/api/fees/fines/${fineRuleForm.id}` : "/api/fees/fines",
+                fineRuleForm.id ? "PUT" : "POST",
+                fineRuleForm
+              ).then(() =>
+                setFineRuleForm({
+                  id: 0,
+                  daysFrom: 0,
+                  daysTo: 0,
+                  fineType: "PER_DAY",
+                  value: "",
+                  active: true,
+                })
+              )
+            }
           >
-            {savingKey === "fineRule"
-              ? fineRuleForm.id ? "Updating…" : "Saving…"
-              : fineRuleForm.id ? "Update Fine Rule" : "Save Fine Rule"}
+            {fineRuleForm.id ? "Update Fine Rule" : "Save Fine Rule"}
           </button>
 
           <div className={styles.tableResponsive}>

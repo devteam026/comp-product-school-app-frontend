@@ -394,57 +394,59 @@ export default function HomeShell({
             </div>
           </header>
 
-          {showNoClassNotice ? (
-            <div className={styles.notice}>
-              No classes are assigned to your account yet. Please contact the admin.
-            </div>
-          ) : null}
+          <div className={styles.contentBody}>
+            {showNoClassNotice ? (
+              <div className={styles.notice}>
+                No classes are assigned to your account yet. Please contact the admin.
+              </div>
+            ) : null}
 
-          {activeItem === "Home" ? (
-            <HomeDashboard
-              students={visibleStudents}
-              role={role}
-              dashboardData={dashboardData}
-              isLoading={isDashboardLoading}
-            />
-          ) : activeItem === "Student Management" ? (
-            <StudentManagement
-              students={visibleStudents}
-              onAddStudent={handleAddStudent}
-              role={role}
-              username={username}
-              classCode={activeClass}
-              isLoading={isStudentsLoading}
-            />
-          ) : activeItem === "Employee Management" ? (
-            <EmployeeManagement />
-          ) : activeItem === "Timetable Management" ? (
-            <TimetableManagement
-              activeClassCode={activeClass}
-              onSelectClass={(classCode) => setActiveClass(classCode)}
-            />
-          ) : activeItem === "Transport Management" ? (
-            <TransportManagement />
-          ) : activeItem === "Hostel Management" ? (
-            <HostelManagement activeClassCode={activeClass} />
-          ) : activeItem === "Leave Management" ? (
-            <LeaveManagement role={role} />
-          ) : activeItem === "Attendance Management" ? (
-            <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
-          ) : activeItem === "Fee Management" ? (
-            <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
-          ) : (
-            <AIEngine
-              classCode={activeClass === "all" ? undefined : activeClass}
-              onStudentClick={(name) => {
-                const match = visibleStudents.find((student) => student.name === name);
-                if (match) {
-                  setSelectedProfile(match);
-                }
-              }}
-              isLoading={isStudentsLoading}
-            />
-          )}
+            {activeItem === "Home" ? (
+              <HomeDashboard
+                students={visibleStudents}
+                role={role}
+                dashboardData={dashboardData}
+                isLoading={isDashboardLoading}
+              />
+            ) : activeItem === "Student Management" ? (
+              <StudentManagement
+                students={visibleStudents}
+                onAddStudent={handleAddStudent}
+                role={role}
+                username={username}
+                classCode={activeClass}
+                isLoading={isStudentsLoading}
+              />
+            ) : activeItem === "Employee Management" ? (
+              <EmployeeManagement />
+            ) : activeItem === "Timetable Management" ? (
+              <TimetableManagement
+                activeClassCode={activeClass}
+                onSelectClass={(classCode) => setActiveClass(classCode)}
+              />
+            ) : activeItem === "Transport Management" ? (
+              <TransportManagement />
+            ) : activeItem === "Hostel Management" ? (
+              <HostelManagement activeClassCode={activeClass} />
+            ) : activeItem === "Leave Management" ? (
+              <LeaveManagement role={role} />
+            ) : activeItem === "Attendance Management" ? (
+              <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
+            ) : activeItem === "Fee Management" ? (
+              <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
+            ) : (
+              <AIEngine
+                classCode={activeClass === "all" ? undefined : activeClass}
+                onStudentClick={(name) => {
+                  const match = visibleStudents.find((student) => student.name === name);
+                  if (match) {
+                    setSelectedProfile(match);
+                  }
+                }}
+                isLoading={isStudentsLoading}
+              />
+            )}
+          </div>
         </main>
       </div>
 
