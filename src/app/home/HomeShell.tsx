@@ -433,7 +433,7 @@ export default function HomeShell({
             ) : activeItem === "Attendance Management" ? (
               <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
             ) : activeItem === "Fee Management" ? (
-              <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
+              <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} classCode={activeClass} />
             ) : (
               <AIEngine
                 classCode={activeClass === "all" ? undefined : activeClass}
