@@ -935,7 +935,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 }
               >
                 <option value="">All</option>
-                {(feeStudents.length ? feeStudents : students).map((student) => (
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
                   </option>
@@ -1003,7 +1003,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 }
               >
                 <option value="">Select student</option>
-                {(feeStudents.length ? feeStudents : students).map((student) => (
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
                   </option>
@@ -1366,7 +1366,7 @@ export default function FeeManagement({ students, isLoading }: FeeManagementProp
                 }
               >
                 <option value="">Select</option>
-                {(feeStudents.length ? feeStudents : students).map((student) => (
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
                   </option>
