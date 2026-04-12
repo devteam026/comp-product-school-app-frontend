@@ -83,14 +83,14 @@ export default function HomeDashboard({
   });
   const pieSlices = classPie.map((item, index) => {
     const colors = [
-      "#2563eb",
       "#16a34a",
-      "#f97316",
-      "#ef4444",
-      "#0ea5e9",
-      "#a855f7",
-      "#14b8a6",
-      "#facc15",
+      "#2563eb",
+      "#0891b2",
+      "#7c3aed",
+      "#ea580c",
+      "#0d9488",
+      "#db2777",
+      "#ca8a04",
     ];
     const color = colors[index % colors.length];
     const startDeg = (item.percentStart / 100) * 360;
@@ -132,126 +132,121 @@ export default function HomeDashboard({
   return (
     <div className={styles.dashboard}>
       <section className={styles.metricGrid}>
+        {/* Total Students */}
         <article className={styles.metricCard}>
-          <h2 className={styles.metricTitle}>Total Students</h2>
+          <div className={styles.metricCardHeader}>
+            <h2 className={styles.metricTitle}>Total Students</h2>
+            <div className={styles.metricIconBadge} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+          </div>
           <p className={styles.metricValue}>{totalStudents}</p>
           <div className={styles.metricSplit}>
-            <span>Male: {maleCount}</span>
-            <span>Female: {femaleCount}</span>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>♂ {maleCount} Male</span>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>♀ {femaleCount} Female</span>
           </div>
           <div className={styles.metricBar}>
             <span
               className={styles.metricFill}
-              style={{
-                width: `${
-                  totalStudents === 0 ? 0 : (maleCount / totalStudents) * 100
-                }%`,
-              }}
+              style={{ width: `${totalStudents === 0 ? 0 : (maleCount / totalStudents) * 100}%` }}
             />
             <span
               className={styles.metricFillAlt}
-              style={{
-                width: `${
-                  totalStudents === 0 ? 0 : (femaleCount / totalStudents) * 100
-                }%`,
-              }}
+              style={{ width: `${totalStudents === 0 ? 0 : (femaleCount / totalStudents) * 100}%` }}
             />
           </div>
         </article>
 
+        {/* Today's Attendance */}
         <article className={styles.metricCard}>
-          <h2 className={styles.metricTitle}>Today Attendance</h2>
+          <div className={styles.metricCardHeader}>
+            <h2 className={styles.metricTitle}>Today&apos;s Attendance</h2>
+            <div className={styles.metricIconBadge} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+          </div>
           <p className={styles.metricValue}>{attendanceToday.present}</p>
           <div className={styles.metricSplit}>
-            <span>Present: {attendanceToday.present}</span>
-            <span>Absent: {attendanceToday.absent}</span>
-            <span>Not Recorded: {attendanceToday.notRecorded ?? 0}</span>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>✓ {attendanceToday.present} Present</span>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitAbsent}`}>✗ {attendanceToday.absent} Absent</span>
+            {(attendanceToday.notRecorded ?? 0) > 0 && (
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>— {attendanceToday.notRecorded} Unrecorded</span>
+            )}
           </div>
           <div className={styles.metricBar}>
             <span
               className={styles.metricFill}
-              style={{
-                width: `${
-                  (attendanceToday.present /
-                    Math.max(attendanceToday.present + attendanceToday.absent, 1)) *
-                  100
-                }%`,
-              }}
+              style={{ width: `${(attendanceToday.present / Math.max(attendanceToday.present + attendanceToday.absent, 1)) * 100}%` }}
             />
             <span
               className={styles.metricFillAlt}
-              style={{
-                width: `${
-                  (attendanceToday.absent /
-                    Math.max(attendanceToday.present + attendanceToday.absent, 1)) *
-                  100
-                }%`,
-              }}
+              style={{ width: `${(attendanceToday.absent / Math.max(attendanceToday.present + attendanceToday.absent, 1)) * 100}%` }}
             />
           </div>
         </article>
 
+        {/* Lowest Attendance (admin only) */}
         {role === "admin" ? (
           <article className={styles.metricCard}>
-            <h2 className={styles.metricTitle}>Lowest Attendance %</h2>
+            <div className={styles.metricCardHeader}>
+              <h2 className={styles.metricTitle}>Lowest Attendance %</h2>
+              <div className={styles.metricIconBadge} aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+              </div>
+            </div>
             {lowestAttendance ? (
               <>
-                <p className={styles.metricValue}>
-                  {lowestAttendance.rate.toFixed(0)}%
-                </p>
+                <p className={styles.metricValue}>{lowestAttendance.rate.toFixed(0)}%</p>
                 <div className={styles.metricSplit}>
-                  <span>Class: {lowestAttendance.classCode}</span>
-                  <span>
-                    Present: {lowestAttendance.present}/{lowestAttendance.total}
-                  </span>
+                  <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>Class {lowestAttendance.classCode}</span>
+                  <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>{lowestAttendance.present}/{lowestAttendance.total} Present</span>
+                </div>
+                <div className={styles.metricBar}>
+                  <span className={styles.metricFill} style={{ width: `${lowestAttendance.rate}%` }} />
+                  <span className={styles.metricFillAlt} style={{ width: `${100 - lowestAttendance.rate}%` }} />
                 </div>
               </>
             ) : (
-              <p className={styles.metricEmpty}>No attendance data</p>
+              <p className={styles.metricEmpty}>No attendance data yet</p>
             )}
           </article>
         ) : null}
 
+        {/* Fee Stats (admin / accountant) */}
         {canSeeFees ? (
           <article className={styles.metricCard}>
-            <h2 className={styles.metricTitle}>Fees This Month</h2>
+            <div className={styles.metricCardHeader}>
+              <h2 className={styles.metricTitle}>Fees This Month</h2>
+              <div className={styles.metricIconBadge} aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="1" x2="12" y2="23"/>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </div>
+            </div>
             <p className={styles.metricValue}>{feeStats.paid}</p>
             <div className={styles.metricSplit}>
-              <span>Paid: {feeStats.paid}</span>
-              <span>Unpaid: {feeStats.unpaid}</span>
-              <span>Free: {feeStats.free}</span>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>✓ {feeStats.paid} Paid</span>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitAbsent}`}>✗ {feeStats.unpaid} Unpaid</span>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>◎ {feeStats.free} Free</span>
             </div>
             <div className={styles.metricBar}>
-              <span
-                className={styles.metricFill}
-                style={{
-                  width: `${
-                    (feeStats.paid /
-                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                    100
-                  }%`,
-                }}
-              />
-              <span
-                className={styles.metricFillAlt}
-                style={{
-                  width: `${
-                    (feeStats.unpaid /
-                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                    100
-                  }%`,
-                }}
-              />
-              <span
-                className={styles.metricFillMuted}
-                style={{
-                  width: `${
-                    (feeStats.free /
-                      (feeStats.paid + feeStats.unpaid + feeStats.free)) *
-                    100
-                  }%`,
-                }}
-              />
+              <span className={styles.metricFill} style={{ width: `${(feeStats.paid / Math.max(feeStats.paid + feeStats.unpaid + feeStats.free, 1)) * 100}%` }} />
+              <span className={styles.metricFillAlt} style={{ width: `${(feeStats.unpaid / Math.max(feeStats.paid + feeStats.unpaid + feeStats.free, 1)) * 100}%` }} />
+              <span className={styles.metricFillMuted} style={{ width: `${(feeStats.free / Math.max(feeStats.paid + feeStats.unpaid + feeStats.free, 1)) * 100}%` }} />
             </div>
           </article>
         ) : null}
@@ -267,11 +262,11 @@ export default function HomeDashboard({
           </div>
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#6366f1" }} />
+              <span className={styles.legendSwatch} style={{ background: "#16a34a" }} />
               Present
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: "#0ea5e9" }} />
+              <span className={styles.legendSwatch} style={{ background: "#dc2626" }} />
               Absent
             </span>
           </div>

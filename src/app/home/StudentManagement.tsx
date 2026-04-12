@@ -17,15 +17,40 @@ const sortFields = [
   "status",
 ] as const;
 
+const relationOptions = [
+  "Parent",
+  "Mother",
+  "Father",
+  "Guardian",
+  "Aunt",
+  "Uncle",
+  "Grandparent",
+  "Sibling",
+  "Cousin",
+  "Other",
+] as const;
+
 type SortField = (typeof sortFields)[number];
 
 type StudentManagementProps = {
   students: Student[];
-  onAddStudent: (student: Student) => Promise<boolean>;
+  onAddStudent: (student: Student) => Promise<{ ok: boolean; student?: Student | null }>;
   role: string;
   username: string;
   classCode?: string;
   isLoading?: boolean;
+};
+
+type GuardianInfo = {
+  id: string;
+  parentName?: string;
+  parentRelation?: string;
+  parentPhone?: string;
+  parentWhatsapp?: string;
+  parentEmail?: string;
+  parentOccupation?: string;
+  fatherName?: string;
+  motherName?: string;
 };
 
 type EditState = {
@@ -36,13 +61,27 @@ type EditState = {
   gender: "Male" | "Female";
   dateOfBirth: string;
   admissionNumber: string;
+  registerNo: string;
   rollNumber: string;
   address: string;
+  session: string;
+  fatherName: string;
+  motherName: string;
   parentName: string;
   parentRelation: string;
   parentPhone: string;
+  parentWhatsapp: string;
   parentEmail: string;
   parentOccupation: string;
+  transportRequired: boolean;
+  transportRoute: string;
+  transportVehicleNo: string;
+  transportStopName: string;
+  hostelRequired: boolean;
+  hostelName: string;
+  hostelRoomNo: string;
+  previousSchoolName: string;
+  previousQualification: string;
   status: "Active" | "Inactive";
   profilePhotoKey?: string;
 };
@@ -54,13 +93,27 @@ const csvHeaders = [
   "gender",
   "dateOfBirth",
   "admissionNumber",
+  "registerNo",
   "rollNumber",
   "address",
+  "session",
+  "fatherName",
+  "motherName",
   "parentName",
   "parentRelation",
   "parentPhone",
+  "parentWhatsapp",
   "parentEmail",
   "parentOccupation",
+  "transportRequired",
+  "transportRoute",
+  "transportVehicleNo",
+  "transportStopName",
+  "hostelRequired",
+  "hostelName",
+  "hostelRoomNo",
+  "previousSchoolName",
+  "previousQualification",
   "status",
 ] as const;
 
@@ -102,14 +155,36 @@ export default function StudentManagement({
   const [gender, setGender] = useState<"Male" | "Female">("Male");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [admissionNumber, setAdmissionNumber] = useState("");
+  const [registerNo, setRegisterNo] = useState("");
   const [rollNumber, setRollNumber] = useState("");
   const [address, setAddress] = useState("");
+  const [session, setSession] = useState("");
+  const [fatherName, setFatherName] = useState("");
+  const [motherName, setMotherName] = useState("");
   const [parentName, setParentName] = useState("");
   const [parentRelation, setParentRelation] = useState("Parent");
   const [parentPhone, setParentPhone] = useState("");
+  const [parentWhatsapp, setParentWhatsapp] = useState("");
+  const [whatsappSame, setWhatsappSame] = useState(false);
   const [parentEmail, setParentEmail] = useState("");
   const [parentOccupation, setParentOccupation] = useState("");
   const [profilePhotoKey, setProfilePhotoKey] = useState<string | null>(null);
+  const [transportRequired, setTransportRequired] = useState(false);
+  const [transportRoute, setTransportRoute] = useState("");
+  const [transportVehicleNo, setTransportVehicleNo] = useState("");
+  const [transportStopName, setTransportStopName] = useState("");
+  const [hostelRequired, setHostelRequired] = useState(false);
+  const [hostelName, setHostelName] = useState("");
+  const [hostelRoomNo, setHostelRoomNo] = useState("");
+  const [previousSchoolName, setPreviousSchoolName] = useState("");
+  const [previousQualification, setPreviousQualification] = useState("");
+  const [enableStudentLogin, setEnableStudentLogin] = useState(false);
+  const [studentPassword, setStudentPassword] = useState("");
+  const [studentPasswordConfirm, setStudentPasswordConfirm] = useState("");
+  const [studentLoginError, setStudentLoginError] = useState<string | null>(null);
+  const [editStudentPassword, setEditStudentPassword] = useState("");
+  const [editStudentPasswordConfirm, setEditStudentPasswordConfirm] = useState("");
+  const [editLoginError, setEditLoginError] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -133,6 +208,37 @@ export default function StudentManagement({
   const [page, setPage] = useState(1);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  const [sessionWarning, setSessionWarning] = useState<string | null>(null);
+  const [hostelSyncError, setHostelSyncError] = useState<string | null>(null);
+
+  const [guardianQuery, setGuardianQuery] = useState("");
+  const [guardianResults, setGuardianResults] = useState<GuardianInfo[]>([]);
+  const [guardianLoading, setGuardianLoading] = useState(false);
+  const [guardianError, setGuardianError] = useState<string | null>(null);
+  const [guardianExisting, setGuardianExisting] = useState(false);
+
+  const [classOptions, setClassOptions] = useState<
+    { classCode: string; grade: string; section: string }[]
+  >([]);
+  const [transportRoutes, setTransportRoutes] = useState<string[]>([]);
+  const [transportVehicles, setTransportVehicles] = useState<string[]>([]);
+  const [transportStops, setTransportStops] = useState<string[]>([]);
+  const [hostelOptions, setHostelOptions] = useState<string[]>([]);
+  const [hostelRooms, setHostelRooms] = useState<string[]>([]);
+  const transportStopOptions = useMemo(() => {
+    const options = [...transportStops];
+    if (transportStopName && !options.includes(transportStopName)) {
+      options.unshift(transportStopName);
+    }
+    return options;
+  }, [transportStops, transportStopName]);
+  const editTransportStopOptions = useMemo(() => {
+    const options = [...transportStops];
+    if (editState?.transportStopName && !options.includes(editState.transportStopName)) {
+      options.unshift(editState.transportStopName);
+    }
+    return options;
+  }, [transportStops, editState?.transportStopName]);
 
   useEffect(() => {
     if (!selectedStudent && !editState) return;
@@ -142,6 +248,125 @@ export default function StudentManagement({
       document.body.style.overflow = previous;
     };
   }, [selectedStudent, editState]);
+
+  useEffect(() => {
+    if (!guardianQuery.trim()) {
+      setGuardianResults([]);
+      setGuardianError(null);
+      return;
+    }
+    let isActive = true;
+    setGuardianLoading(true);
+    setGuardianError(null);
+    const timeout = window.setTimeout(() => {
+      const token = window.localStorage.getItem("authToken");
+      fetch(apiUrl(`/api/students/guardians?q=${encodeURIComponent(guardianQuery)}`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
+        .then((data) => {
+          if (!isActive) return;
+          setGuardianResults(Array.isArray(data) ? data : []);
+        })
+        .catch(() => {
+          if (!isActive) return;
+          setGuardianResults([]);
+          setGuardianError("Unable to load guardians. Try again.");
+        })
+        .finally(() => {
+          if (isActive) setGuardianLoading(false);
+        });
+    }, 300);
+    return () => {
+      isActive = false;
+      window.clearTimeout(timeout);
+    };
+  }, [guardianQuery]);
+
+  useEffect(() => {
+    let isActive = true;
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    Promise.all([
+      fetch(apiUrl("/api/student-options/transport/routes"), { headers })
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []),
+      fetch(apiUrl("/api/student-options/hostels"), { headers })
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []),
+    ]).then(([routes, hostels]) => {
+      if (!isActive) return;
+      setTransportRoutes(Array.isArray(routes) ? routes : []);
+      setHostelOptions(Array.isArray(hostels) ? hostels : []);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const activeRoute = transportRequired
+      ? transportRoute
+      : editState?.transportRoute ?? "";
+    if (!transportRequired && !editState?.transportRequired) {
+      setTransportVehicles([]);
+      return;
+    }
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    const routeParam = activeRoute ? `?route=${encodeURIComponent(activeRoute)}` : "";
+    fetch(apiUrl(`/api/student-options/transport/vehicles${routeParam}`), { headers })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setTransportVehicles(Array.isArray(data) ? data : []))
+      .catch(() => setTransportVehicles([]));
+  }, [transportRequired, transportRoute, editState?.transportRoute, editState?.transportRequired]);
+
+  useEffect(() => {
+    const activeRoute = transportRequired
+      ? transportRoute
+      : editState?.transportRoute ?? "";
+    if (!transportRequired && !editState?.transportRequired) {
+      setTransportStops([]);
+      return;
+    }
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    const routeParam = activeRoute ? `?route=${encodeURIComponent(activeRoute)}` : "";
+    fetch(apiUrl(`/api/student-options/transport/stoppages${routeParam}`), { headers })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) =>
+        setTransportStops(
+          Array.isArray(data)
+            ? [...data].sort((a, b) => a.localeCompare(b))
+            : []
+        )
+      )
+      .catch(() => setTransportStops([]));
+  }, [transportRequired, transportRoute, editState?.transportRoute, editState?.transportRequired]);
+
+  useEffect(() => {
+    const activeHostel = hostelRequired
+      ? hostelName
+      : editState?.hostelName ?? "";
+    if (!hostelRequired && !editState?.hostelRequired) {
+      setHostelRooms([]);
+      return;
+    }
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    const hostelParam = activeHostel ? `?hostel=${encodeURIComponent(activeHostel)}` : "";
+    const availabilityParam = hostelParam ? `${hostelParam}&onlyAvailable=true` : "?onlyAvailable=true";
+    fetch(apiUrl(`/api/student-options/hostels/rooms${availabilityParam}`), { headers })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setHostelRooms(Array.isArray(data) ? data : []))
+      .catch(() => setHostelRooms([]));
+  }, [hostelRequired, hostelName, editState?.hostelName, editState?.hostelRequired]);
+
+  useEffect(() => {
+    if (hostelOptions.length > 0) return;
+    if (!hostelRequired) return;
+    // Hostels list is expected from API; if it's empty, data likely not seeded.
+  }, [hostelOptions.length, hostelRequired]);
 
   const hasClassLock = Boolean(classCode && classCode !== "all");
   const parseClassCode = (code: string) => {
@@ -158,13 +383,95 @@ export default function StudentManagement({
   const displayLockedSection = hasClassLock
     ? derivedSection || "N/A"
     : derivedSection;
+  const hasSelectedClass = Boolean(derivedGrade.trim());
 
-  const classOptions = useMemo(() => {
-    const classCodes = Array.from(
-      new Set(students.map((student) => student.classCode))
-    ).sort();
-    return classCodes;
-  }, [students]);
+  const sessionOptions = useMemo(() => {
+    const year = new Date().getFullYear();
+    return [
+      `${year - 1}-${year}`,
+      `${year}-${year + 1}`,
+      `${year + 1}-${year + 2}`,
+    ];
+  }, []);
+
+  useEffect(() => {
+    if (hasSelectedClass && sessionWarning) {
+      setSessionWarning(null);
+    }
+  }, [hasSelectedClass, sessionWarning]);
+
+  useEffect(() => {
+    let isActive = true;
+    const token = window.localStorage.getItem("authToken");
+    fetch(apiUrl("/api/classes/manage"), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => {
+        if (res.ok) return res.json();
+        return fetch(apiUrl("/api/classes"), {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }).then((fallback) => (fallback.ok ? fallback.json() : []));
+      })
+      .then((data) => {
+        if (!isActive) return;
+        const list = Array.isArray(data) ? data : [];
+        const mapped = list.map((item) => {
+          const classCode = item.classCode ?? item ?? "";
+          const parsed = parseClassCode(classCode);
+          return {
+            classCode,
+            grade: item.grade ?? parsed.grade,
+            section: item.section ?? parsed.section ?? "",
+          };
+        });
+        setClassOptions(mapped.filter((item) => item.classCode));
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setClassOptions([]);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const resolvedClassOptions = useMemo(() => {
+    if (classOptions.length > 0) return classOptions;
+    const codes = Array.from(new Set(students.map((student) => student.classCode)));
+    return codes.map((code) => {
+      const parsed = parseClassCode(code);
+      return { classCode: code, grade: parsed.grade, section: parsed.section };
+    });
+  }, [classOptions, students]);
+
+  const gradeOptions = useMemo(() => {
+    const grades = resolvedClassOptions.map((item) => item.grade).filter(Boolean);
+    return Array.from(new Set(grades)).sort();
+  }, [resolvedClassOptions]);
+
+  const sectionOptions = useMemo(() => {
+    if (!derivedGrade) return [];
+    return resolvedClassOptions
+      .filter((item) => item.grade === derivedGrade)
+      .map((item) => item.section || "N/A")
+      .filter(Boolean)
+      .filter((value, index, self) => self.indexOf(value) === index)
+      .sort();
+  }, [resolvedClassOptions, derivedGrade]);
+
+  const gradeOptionsWithLock = useMemo(() => {
+    if (hasClassLock && derivedGrade && !gradeOptions.includes(derivedGrade)) {
+      return [derivedGrade, ...gradeOptions];
+    }
+    return gradeOptions;
+  }, [hasClassLock, derivedGrade, gradeOptions]);
+
+  const sectionOptionsWithLock = useMemo(() => {
+    if (hasClassLock && displayLockedSection && !sectionOptions.includes(displayLockedSection)) {
+      return [displayLockedSection, ...sectionOptions];
+    }
+    return sectionOptions;
+  }, [hasClassLock, displayLockedSection, sectionOptions]);
 
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -201,50 +508,149 @@ export default function StudentManagement({
     page * pageSize
   );
 
+  const syncHostelAllocation = async (
+    studentId: string,
+    required: boolean,
+    hostel: string,
+    room: string
+  ) => {
+    setHostelSyncError(null);
+    const token = window.localStorage.getItem("authToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    try {
+      if (!required) {
+        const response = await fetch(
+          apiUrl(`/api/hostels/manage/allocations/by-student/${studentId}`),
+          { method: "DELETE", headers }
+        );
+        if (!response.ok && response.status !== 404) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err?.error ?? "Unable to clear hostel allocation");
+        }
+        return;
+      }
+      const response = await fetch(apiUrl("/api/hostels/manage/allocations/by-student"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(headers ?? {}),
+        },
+        body: JSON.stringify({
+          studentId,
+          hostelName: hostel,
+          roomNumber: room,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error ?? "Unable to save hostel allocation");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Hostel sync failed";
+      setHostelSyncError(message);
+    }
+  };
+
   const handleAddStudent = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
     const safeGrade = derivedGrade.trim() || "-";
-    const safeSection = derivedSection.trim() || "-";
-    const newClassCode = `${safeGrade}${safeSection}`;
+    const normalizedSection = derivedSection.trim() || "N/A";
+    const newClassCode =
+      normalizedSection === "N/A" ? safeGrade : `${safeGrade}${normalizedSection}`;
+    if (!hasSelectedClass) {
+      setSessionWarning("Select class first, then choose session.");
+      return;
+    }
+
+    if (enableStudentLogin && studentPassword !== studentPasswordConfirm) {
+      setStudentLoginError("Passwords do not match.");
+      return;
+    }
 
     const newStudent: Student = {
       id: crypto.randomUUID(),
       name: trimmedName,
       grade: safeGrade,
-      section: safeSection,
+      section: normalizedSection,
       classCode: newClassCode,
       gender,
       dateOfBirth,
       admissionNumber: admissionNumber.trim(),
+      registerNo: registerNo.trim(),
       rollNumber: rollNumber.trim(),
       address: address.trim(),
+      session: session.trim(),
+      fatherName: fatherName.trim(),
+      motherName: motherName.trim(),
       parentName: parentName.trim(),
       parentRelation: parentRelation.trim(),
       parentPhone: parentPhone.trim(),
+      parentWhatsapp: parentWhatsapp.trim(),
       parentEmail: parentEmail.trim(),
       parentOccupation: parentOccupation.trim(),
+      transportRequired,
+      transportRoute: transportRoute.trim(),
+      transportVehicleNo: transportVehicleNo.trim(),
+      transportStopName: transportStopName.trim(),
+      hostelRequired,
+      hostelName: hostelName.trim(),
+      hostelRoomNo: hostelRoomNo.trim(),
+      previousSchoolName: previousSchoolName.trim(),
+      previousQualification: previousQualification.trim(),
+      studentPassword: enableStudentLogin ? studentPassword : "",
       status: "Active",
       history: ["Student record created"],
       profilePhotoKey: profilePhotoKey ?? undefined,
     };
 
-    await onAddStudent(newStudent);
+    const addResult = await onAddStudent(newStudent);
+    if (addResult.ok) {
+      const studentId = addResult.student?.id ?? newStudent.id;
+      if (hostelRequired || hostelName || hostelRoomNo) {
+        await syncHostelAllocation(
+          studentId,
+          hostelRequired,
+          hostelName.trim(),
+          hostelRoomNo.trim()
+        );
+      }
+    }
     setName("");
     setGrade("");
     setSection("");
     setGender("Male");
     setDateOfBirth("");
     setAdmissionNumber("");
+    setRegisterNo("");
     setRollNumber("");
     setAddress("");
+    setSession("");
+    setFatherName("");
+    setMotherName("");
     setParentName("");
     setParentRelation("Parent");
     setParentPhone("");
+    setParentWhatsapp("");
+    setWhatsappSame(false);
     setParentEmail("");
     setParentOccupation("");
+    setTransportRequired(false);
+    setTransportRoute("");
+    setTransportVehicleNo("");
+    setTransportStopName("");
+    setHostelRequired(false);
+    setHostelName("");
+    setHostelRoomNo("");
+    setHostelSyncError(null);
+    setPreviousSchoolName("");
+    setPreviousQualification("");
+    setEnableStudentLogin(false);
+    setStudentPassword("");
+    setStudentPasswordConfirm("");
+    setStudentLoginError(null);
     setProfilePhotoKey(null);
     setPhotoPreview(null);
     setPhotoError(null);
@@ -302,22 +708,40 @@ export default function StudentManagement({
       gender: student.gender,
       dateOfBirth: student.dateOfBirth,
       admissionNumber: student.admissionNumber,
+      registerNo: student.registerNo ?? "",
       rollNumber: student.rollNumber,
       address: student.address,
+      session: student.session ?? "",
+      fatherName: student.fatherName ?? "",
+      motherName: student.motherName ?? "",
       parentName: student.parentName,
       parentRelation: student.parentRelation,
       parentPhone: student.parentPhone,
+      parentWhatsapp: student.parentWhatsapp ?? "",
       parentEmail: student.parentEmail,
       parentOccupation: student.parentOccupation,
+      transportRequired: student.transportRequired ?? false,
+      transportRoute: student.transportRoute ?? "",
+      transportVehicleNo: student.transportVehicleNo ?? "",
+      transportStopName: student.transportStopName ?? "",
+      hostelRequired: student.hostelRequired ?? false,
+      hostelName: student.hostelName ?? "",
+      hostelRoomNo: student.hostelRoomNo ?? "",
+      previousSchoolName: student.previousSchoolName ?? "",
+      previousQualification: student.previousQualification ?? "",
       status: student.status,
       profilePhotoKey: student.profilePhotoKey,
     });
+    setEditStudentPassword("");
+    setEditStudentPasswordConfirm("");
+    setEditLoginError(null);
     setEditPhotoPreview(null);
     setEditPhotoUrl(null);
     setEditPhotoError(null);
     setEditPhotoLoading(false);
     setEditSaveStatus("idle");
     setEditSaveMessage(null);
+    setHostelSyncError(null);
     if (student.profilePhotoKey) {
       setEditPhotoLoading(true);
       const token = window.localStorage.getItem("authToken");
@@ -339,10 +763,20 @@ export default function StudentManagement({
 
   const handleSaveEdit = async () => {
     if (!editState) return;
+    if (editStudentPassword || editStudentPasswordConfirm) {
+      if (editStudentPassword !== editStudentPasswordConfirm) {
+        setEditLoginError("Passwords do not match.");
+        return;
+      }
+    }
     const updated: Student = {
       ...students.find((student) => student.id === editState.id)!,
       ...editState,
-      classCode: `${editState.grade}${editState.section}`,
+      classCode:
+        editState.section === "N/A"
+          ? editState.grade
+          : `${editState.grade}${editState.section}`,
+      studentPassword: editStudentPassword || "",
       history: [
         ...(students.find((student) => student.id === editState.id)?.history ?? []),
         "Student record updated",
@@ -350,8 +784,14 @@ export default function StudentManagement({
     };
     setEditSaveStatus("saving");
     setEditSaveMessage(null);
-    const ok = await onAddStudent(updated);
-    if (ok) {
+    const saveResult = await onAddStudent(updated);
+    if (saveResult.ok) {
+      await syncHostelAllocation(
+        updated.id,
+        editState.hostelRequired,
+        editState.hostelName.trim(),
+        editState.hostelRoomNo.trim()
+      );
       setEditSaveStatus("success");
       setEditSaveMessage("Student updated successfully.");
     } else {
@@ -370,13 +810,27 @@ export default function StudentManagement({
         student.gender,
         student.dateOfBirth,
         student.admissionNumber,
+        student.registerNo ?? "",
         student.rollNumber,
         student.address,
+        student.session ?? "",
+        student.fatherName ?? "",
+        student.motherName ?? "",
         student.parentName,
         student.parentRelation,
         student.parentPhone,
+        student.parentWhatsapp ?? "",
         student.parentEmail,
         student.parentOccupation,
+        student.transportRequired ? "Yes" : "No",
+        student.transportRoute ?? "",
+        student.transportVehicleNo ?? "",
+        student.transportStopName ?? "",
+        student.hostelRequired ? "Yes" : "No",
+        student.hostelName ?? "",
+        student.hostelRoomNo ?? "",
+        student.previousSchoolName ?? "",
+        student.previousQualification ?? "",
         student.status,
       ])
     );
@@ -397,23 +851,39 @@ export default function StudentManagement({
     const records = parseCsv(text);
     records.forEach((record) => {
       const importGrade = hasClassLock ? derivedGrade : record.grade ?? "-";
-      const importSection = hasClassLock ? derivedSection : record.section ?? "-";
+      const importSection = hasClassLock ? derivedSection : record.section ?? "N/A";
+      const importClassCode =
+        importSection === "N/A" ? importGrade : `${importGrade}${importSection}`;
       const newStudent: Student = {
         id: crypto.randomUUID(),
         name: record.name ?? "",
         grade: importGrade,
         section: importSection,
-        classCode: `${importGrade}${importSection}`,
+        classCode: importClassCode,
         gender: (record.gender as "Male" | "Female") ?? "Male",
         dateOfBirth: record.dateOfBirth ?? "",
         admissionNumber: record.admissionNumber ?? "",
+        registerNo: record.registerNo ?? "",
         rollNumber: record.rollNumber ?? "",
         address: record.address ?? "",
+        session: record.session ?? "",
+        fatherName: record.fatherName ?? "",
+        motherName: record.motherName ?? "",
         parentName: record.parentName ?? "",
         parentRelation: record.parentRelation ?? "Parent",
         parentPhone: record.parentPhone ?? "",
+        parentWhatsapp: record.parentWhatsapp ?? "",
         parentEmail: record.parentEmail ?? "",
         parentOccupation: record.parentOccupation ?? "",
+        transportRequired: record.transportRequired === "Yes",
+        transportRoute: record.transportRoute ?? "",
+        transportVehicleNo: record.transportVehicleNo ?? "",
+        transportStopName: record.transportStopName ?? "",
+        hostelRequired: record.hostelRequired === "Yes",
+        hostelName: record.hostelName ?? "",
+        hostelRoomNo: record.hostelRoomNo ?? "",
+        previousSchoolName: record.previousSchoolName ?? "",
+        previousQualification: record.previousQualification ?? "",
         status: record.status === "Inactive" ? "Inactive" : "Active",
         history: ["Imported from CSV"],
       };
@@ -499,7 +969,7 @@ export default function StudentManagement({
               <input
                 className={styles.input}
                 type="file"
-                accept="image/<span className={styles.requiredMark}>*</span>"
+                accept="image/*"
                 onChange={handlePhotoUpload}
                 disabled={photoUploading}
               />
@@ -515,7 +985,7 @@ export default function StudentManagement({
           {photoError ? <div className={styles.error}>{photoError}</div> : null}
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Student Name
+              Student Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
@@ -526,7 +996,7 @@ export default function StudentManagement({
             </label>
 
             <label className={styles.label}>
-              Gender
+              Gender <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={gender}
@@ -541,7 +1011,7 @@ export default function StudentManagement({
             </label>
 
             <label className={styles.label}>
-              Date of Birth
+              Date of Birth <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -556,13 +1026,25 @@ export default function StudentManagement({
               <input
                 className={styles.input}
                 type="text"
-                value={admissionNumber}
+                value={admissionNumber || "Auto-generated"}
                 onChange={(event) => setAdmissionNumber(event.target.value)}
+                readOnly
               />
             </label>
 
             <label className={styles.label}>
-              Roll Number
+              Register No <span className={styles.requiredMark}>*</span>
+              <input
+                className={styles.input}
+                type="text"
+                value={registerNo}
+                onChange={(event) => setRegisterNo(event.target.value)}
+                required
+              />
+            </label>
+
+            <label className={styles.label}>
+              Roll Number <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
@@ -573,7 +1055,7 @@ export default function StudentManagement({
             </label>
 
             <label className={styles.label}>
-              Address
+              Address <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
@@ -587,34 +1069,179 @@ export default function StudentManagement({
           <div className={styles.sectionTitle}>Class Details</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Grade
-              <input
+              Grade <span className={styles.requiredMark}>*</span>
+              <select
                 className={styles.input}
-                type="text"
                 value={derivedGrade}
-                onChange={(event) => setGrade(event.target.value)}
+                onChange={(event) => {
+                  setGrade(event.target.value);
+                  setSection("");
+                }}
                 disabled={hasClassLock}
                 required={!hasClassLock}
-              />
+              >
+                <option value="">Select</option>
+                {gradeOptionsWithLock.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className={styles.label}>
-              Section
-              <input
+              Section <span className={styles.requiredMark}>*</span>
+              <select
                 className={styles.input}
-                type="text"
-                value={hasClassLock ? displayLockedSection : derivedSection}
+                value={
+                  hasClassLock
+                    ? displayLockedSection
+                    : derivedSection || (sectionOptions.includes("N/A") ? "N/A" : "")
+                }
                 onChange={(event) => setSection(event.target.value)}
-                disabled={hasClassLock}
+                disabled={hasClassLock || !derivedGrade}
                 required={!hasClassLock}
-              />
+              >
+                <option value="">Select</option>
+                {sectionOptionsWithLock.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.label}>
+              Session <span className={styles.requiredMark}>*</span>
+              <select
+                className={styles.input}
+                value={session}
+                onChange={(event) => setSession(event.target.value)}
+                disabled={!hasSelectedClass}
+                onFocus={() => {
+                  if (!hasSelectedClass) {
+                    setSessionWarning("Select class first, then choose session.");
+                  } else {
+                    setSessionWarning(null);
+                  }
+                }}
+                required
+              >
+                <option value="">Select</option>
+                {sessionOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
+          {sessionWarning ? (
+            <div className={styles.notice}>{sessionWarning}</div>
+          ) : null}
 
           <div className={styles.sectionTitle}>Parent/Guardian Details</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Parent Name
+              <span className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={guardianExisting}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setGuardianExisting(checked);
+                    if (!checked) {
+                      setGuardianQuery("");
+                      setGuardianResults([]);
+                      setGuardianError(null);
+                    }
+                  }}
+                />
+                Guardian Already Exist
+              </span>
+            </label>
+          </div>
+
+          {guardianExisting ? (
+            <div className={styles.fieldRow}>
+              <label className={styles.label}>
+                Search Guardian
+                <input
+                  className={styles.input}
+                  type="search"
+                  value={guardianQuery}
+                  onChange={(event) => setGuardianQuery(event.target.value)}
+                  placeholder="Search by name, phone, or email"
+                />
+              </label>
+              <label className={styles.label}>
+                Select Guardian
+                <select
+                  className={styles.input}
+                  onChange={(event) => {
+                    const selected = guardianResults.find(
+                      (item) => item.id === event.target.value
+                    );
+                    if (!selected) return;
+                    setParentName(selected.parentName ?? "");
+                    setParentRelation(selected.parentRelation ?? "Parent");
+                    setParentPhone(selected.parentPhone ?? "");
+                    setParentWhatsapp(selected.parentWhatsapp ?? "");
+                    setParentEmail(selected.parentEmail ?? "");
+                    setParentOccupation(selected.parentOccupation ?? "");
+                    setFatherName(selected.fatherName ?? "");
+                    setMotherName(selected.motherName ?? "");
+                    setWhatsappSame(
+                      Boolean(
+                        selected.parentPhone &&
+                          selected.parentWhatsapp &&
+                          selected.parentPhone === selected.parentWhatsapp
+                      )
+                    );
+                  }}
+                >
+                  <option value="">Select</option>
+                  {guardianResults.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.parentName} ({item.parentPhone || item.parentEmail})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {guardianLoading ? (
+                <div className={styles.loading}>Searching guardians...</div>
+              ) : null}
+              {guardianError ? (
+                <div className={styles.error}>{guardianError}</div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
+              Father Name 
+              <input
+                className={styles.input}
+                type="text"
+                value={fatherName}
+                onChange={(event) => setFatherName(event.target.value)}
+                
+              />
+            </label>
+
+            <label className={styles.label}>
+              Mother Name 
+              <input
+                className={styles.input}
+                type="text"
+                value={motherName}
+                onChange={(event) => setMotherName(event.target.value)}
+                
+              />
+            </label>
+
+            <label className={styles.label}>
+              Parent/Guardian Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
@@ -625,43 +1252,79 @@ export default function StudentManagement({
             </label>
 
             <label className={styles.label}>
-              Relation
+              Relation <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={parentRelation}
                 onChange={(event) => setParentRelation(event.target.value)}
                 required
               >
-                <option value="Parent">Parent</option>
-                <option value="Mother">Mother</option>
-                <option value="Father">Father</option>
-                <option value="Guardian">Guardian</option>
+                {relationOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </label>
 
             <label className={styles.label}>
-              Phone
+              Mobile <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="tel"
                 value={parentPhone}
-                onChange={(event) => setParentPhone(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setParentPhone(value);
+                  if (whatsappSame) {
+                    setParentWhatsapp(value);
+                  }
+                }}
                 required
               />
             </label>
 
             <label className={styles.label}>
-              Email
+              WhatsApp <span className={styles.requiredMark}>*</span>
+              <input
+                className={styles.input}
+                type="tel"
+                value={parentWhatsapp}
+                onChange={(event) => setParentWhatsapp(event.target.value)}
+                required
+              />
+            </label>
+
+            <label className={styles.label}>
+              <span className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={whatsappSame}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setWhatsappSame(checked);
+                    if (checked) {
+                      setParentWhatsapp(parentPhone);
+                    }
+                  }}
+                />
+                WhatsApp same as mobile
+              </span>
+            </label>
+
+            <label className={styles.label}>
+              Email <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="email"
                 value={parentEmail}
                 onChange={(event) => setParentEmail(event.target.value)}
+                required
               />
             </label>
 
             <label className={styles.label}>
-              Occupation
+              Occupation <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
@@ -671,6 +1334,176 @@ export default function StudentManagement({
               />
             </label>
           </div>
+
+          <div className={styles.sectionTitle}>Transport Details</div>
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
+              <span className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={transportRequired}
+                  onChange={(event) => {
+                    const next = event.target.checked;
+                    setTransportRequired(next);
+                    if (!next) {
+                      setTransportStopName("");
+                    }
+                  }}
+                />
+                Transport Required
+              </span>
+            </label>
+          </div>
+          {transportRequired ? (
+            <div className={styles.fieldRow}>
+              <label className={styles.label}>
+                Transport Stop <span className={styles.requiredMark}>*</span>
+                <select
+                  className={styles.input}
+                  value={transportStopName}
+                  onChange={(event) => setTransportStopName(event.target.value)}
+                  required
+                >
+                  <option value="">Select</option>
+                  {transportStopOptions.map((stop) => (
+                    <option key={stop} value={stop}>
+                      {stop}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          <div className={styles.sectionTitle}>Hostel Details</div>
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
+              <span className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={hostelRequired}
+                  onChange={(event) => setHostelRequired(event.target.checked)}
+                />
+                Hostel Required
+              </span>
+            </label>
+          </div>
+          {hostelRequired ? (
+            <div className={styles.fieldRow}>
+              <label className={styles.label}>
+                Hostel Name <span className={styles.requiredMark}>*</span>
+                <select
+                  className={styles.input}
+                  value={hostelName}
+                  onChange={(event) => setHostelName(event.target.value)}
+                  required
+                >
+                  <option value="">Select</option>
+                  {hostelOptions.map((hostel) => (
+                    <option key={hostel} value={hostel}>
+                      {hostel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.label}>
+                Room Number <span className={styles.requiredMark}>*</span>
+                <select
+                  className={styles.input}
+                  value={hostelRoomNo}
+                  onChange={(event) => setHostelRoomNo(event.target.value)}
+                  required
+                >
+                  <option value="">Select</option>
+                  {hostelRooms.map((room) => (
+                    <option key={room} value={room}>
+                      {room}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {hostelSyncError ? (
+                <div className={styles.error}>{hostelSyncError}</div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className={styles.sectionTitle}>Previous School Details</div>
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
+              Previous School Name
+              <input
+                className={styles.input}
+                type="text"
+                value={previousSchoolName}
+                onChange={(event) => setPreviousSchoolName(event.target.value)}
+              />
+            </label>
+            <label className={styles.label}>
+              Qualification
+              <input
+                className={styles.input}
+                type="text"
+                value={previousQualification}
+                onChange={(event) => setPreviousQualification(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className={styles.sectionTitle}>Student Login</div>
+          <div className={styles.fieldRow}>
+            <label className={styles.label}>
+              <span className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={enableStudentLogin}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setEnableStudentLogin(checked);
+                    if (!checked) {
+                      setStudentPassword("");
+                      setStudentPasswordConfirm("");
+                      setStudentLoginError(null);
+                    }
+                  }}
+                />
+                Enable Student Login (username = parent mobile)
+              </span>
+            </label>
+          </div>
+          {enableStudentLogin ? (
+            <div className={styles.fieldRow}>
+              <label className={styles.label}>
+                Password <span className={styles.requiredMark}>*</span>
+                <input
+                  className={styles.input}
+                  type="password"
+                  value={studentPassword}
+                  onChange={(event) => {
+                    setStudentPassword(event.target.value);
+                    setStudentLoginError(null);
+                  }}
+                  required
+                />
+              </label>
+              <label className={styles.label}>
+                Retype Password <span className={styles.requiredMark}>*</span>
+                <input
+                  className={styles.input}
+                  type="password"
+                  value={studentPasswordConfirm}
+                  onChange={(event) => {
+                    setStudentPasswordConfirm(event.target.value);
+                    setStudentLoginError(null);
+                  }}
+                  required
+                />
+              </label>
+            </div>
+          ) : null}
+          {studentLoginError ? (
+            <div className={styles.error}>{studentLoginError}</div>
+          ) : null}
 
           <button className={styles.button} type="submit">
             Add Student
@@ -700,9 +1533,9 @@ export default function StudentManagement({
                   }}
                 >
                   <option value="all">All Classes</option>
-                  {classOptions.map((code) => (
-                    <option key={code} value={code}>
-                      {code}
+                  {resolvedClassOptions.map((item) => (
+                    <option key={item.classCode} value={item.classCode}>
+                      {item.classCode}
                     </option>
                   ))}
                 </select>
@@ -774,6 +1607,7 @@ export default function StudentManagement({
                   <tr>
                     <th>Name</th>
                     <th>Class</th>
+                    <th>Register #</th>
                     <th>Roll #</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -790,6 +1624,7 @@ export default function StudentManagement({
                         {student.name}
                       </td>
                       <td data-label="Class">{student.classCode}</td>
+                      <td data-label="Register #">{student.registerNo || "-"}</td>
                       <td data-label="Roll #">{student.rollNumber || "-"}</td>
                       <td data-label="Status">{student.status}</td>
                       <td data-label="Actions">
@@ -901,7 +1736,7 @@ export default function StudentManagement({
                     <input
                       className={styles.input}
                       type="file"
-                      accept="image/<span className={styles.requiredMark}>*</span>"
+                      accept="image/*"
                       onChange={handleEditPhotoUpload}
                       disabled={editPhotoUploading}
                     />
@@ -923,7 +1758,7 @@ export default function StudentManagement({
                     <div className={styles.error}>{editPhotoError}</div>
                   ) : null}
                   <label className={styles.label}>
-                    Name
+                    Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.name}
@@ -933,7 +1768,7 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Grade
+                    Grade <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.grade}
@@ -944,7 +1779,7 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Section
+                    Section <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.section}
@@ -955,7 +1790,7 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Gender
+                    Gender <span className={styles.requiredMark}>*</span>
                     <select
                       className={styles.input}
                       value={editState.gender}
@@ -971,7 +1806,7 @@ export default function StudentManagement({
                     </select>
                   </label>
                   <label className={styles.label}>
-                    Date of Birth
+                    Date of Birth <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       type="date"
@@ -992,10 +1827,21 @@ export default function StudentManagement({
                           admissionNumber: event.target.value,
                         })
                       }
+                      readOnly
                     />
                   </label>
                   <label className={styles.label}>
-                    Roll Number
+                    Register No <span className={styles.requiredMark}>*</span>
+                    <input
+                      className={styles.input}
+                      value={editState.registerNo}
+                      onChange={(event) =>
+                        setEditState({ ...editState, registerNo: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Roll Number <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.rollNumber}
@@ -1005,7 +1851,7 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Address
+                    Address <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.address}
@@ -1015,7 +1861,7 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Status
+                    Status <span className={styles.requiredMark}>*</span>
                     <select
                       className={styles.input}
                       value={editState.status}
@@ -1031,7 +1877,37 @@ export default function StudentManagement({
                     </select>
                   </label>
                   <label className={styles.label}>
-                    Parent Name
+                    Session <span className={styles.requiredMark}>*</span>
+                    <input
+                      className={styles.input}
+                      value={editState.session}
+                      onChange={(event) =>
+                        setEditState({ ...editState, session: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Father Name <span className={styles.requiredMark}>*</span>
+                    <input
+                      className={styles.input}
+                      value={editState.fatherName}
+                      onChange={(event) =>
+                        setEditState({ ...editState, fatherName: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Mother Name <span className={styles.requiredMark}>*</span>
+                    <input
+                      className={styles.input}
+                      value={editState.motherName}
+                      onChange={(event) =>
+                        setEditState({ ...editState, motherName: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Parent/Guardian Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.parentName}
@@ -1041,8 +1917,8 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Relation
-                    <input
+                    Relation <span className={styles.requiredMark}>*</span>
+                    <select
                       className={styles.input}
                       value={editState.parentRelation}
                       onChange={(event) =>
@@ -1051,10 +1927,16 @@ export default function StudentManagement({
                           parentRelation: event.target.value,
                         })
                       }
-                    />
+                    >
+                      {relationOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className={styles.label}>
-                    Phone
+                    Mobile <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.parentPhone}
@@ -1064,17 +1946,30 @@ export default function StudentManagement({
                     />
                   </label>
                   <label className={styles.label}>
-                    Email
+                    WhatsApp <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
-                      value={editState.parentEmail}
+                      value={editState.parentWhatsapp}
                       onChange={(event) =>
-                        setEditState({ ...editState, parentEmail: event.target.value })
+                        setEditState({ ...editState, parentWhatsapp: event.target.value })
                       }
                     />
                   </label>
                   <label className={styles.label}>
-                    Occupation
+                    Email <span className={styles.requiredMark}>*</span>
+                    <input
+                      className={styles.input}
+                      value={editState.parentEmail}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          parentEmail: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Occupation <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.parentOccupation}
@@ -1086,11 +1981,168 @@ export default function StudentManagement({
                       }
                     />
                   </label>
+                  <label className={styles.label}>
+                    Transport Required
+                    <select
+                      className={styles.input}
+                      value={editState.transportRequired ? "yes" : "no"}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          transportRequired: event.target.value === "yes",
+                          transportRoute:
+                            event.target.value === "yes" ? editState.transportRoute : "",
+                          transportVehicleNo:
+                            event.target.value === "yes" ? editState.transportVehicleNo : "",
+                          transportStopName:
+                            event.target.value === "yes" ? editState.transportStopName : "",
+                        })
+                      }
+                    >
+                      <option value="no">No</option>
+                      <option value="yes">Yes</option>
+                    </select>
+                  </label>
+                  {editState.transportRequired ? (
+                    <label className={styles.label}>
+                      Transport Stop <span className={styles.requiredMark}>*</span>
+                      <select
+                        className={styles.input}
+                        value={editState.transportStopName}
+                        onChange={(event) =>
+                          setEditState({
+                            ...editState,
+                            transportStopName: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">Select</option>
+                        {editTransportStopOptions.map((stop) => (
+                          <option key={stop} value={stop}>
+                            {stop}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <label className={styles.label}>
+                    Hostel Required
+                    <select
+                      className={styles.input}
+                      value={editState.hostelRequired ? "yes" : "no"}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          hostelRequired: event.target.value === "yes",
+                        })
+                      }
+                    >
+                      <option value="no">No</option>
+                      <option value="yes">Yes</option>
+                    </select>
+                  </label>
+                  {editState.hostelRequired ? (
+                    <>
+                      <label className={styles.label}>
+                        Hostel Name <span className={styles.requiredMark}>*</span>
+                        <select
+                          className={styles.input}
+                          value={editState.hostelName}
+                          onChange={(event) =>
+                            setEditState({
+                              ...editState,
+                              hostelName: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="">Select</option>
+                          {hostelOptions.map((hostel) => (
+                            <option key={hostel} value={hostel}>
+                              {hostel}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={styles.label}>
+                        Room Number <span className={styles.requiredMark}>*</span>
+                        <select
+                          className={styles.input}
+                          value={editState.hostelRoomNo}
+                          onChange={(event) =>
+                            setEditState({
+                              ...editState,
+                              hostelRoomNo: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="">Select</option>
+                          {hostelRooms.map((room) => (
+                            <option key={room} value={room}>
+                              {room}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  ) : null}
+                  <label className={styles.label}>
+                    Previous School
+                    <input
+                      className={styles.input}
+                      value={editState.previousSchoolName}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          previousSchoolName: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Qualification
+                    <input
+                      className={styles.input}
+                      value={editState.previousQualification}
+                      onChange={(event) =>
+                        setEditState({
+                          ...editState,
+                          previousQualification: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Set Student Login Password
+                    <input
+                      className={styles.input}
+                      type="password"
+                      value={editStudentPassword}
+                      onChange={(event) => {
+                        setEditStudentPassword(event.target.value);
+                        setEditLoginError(null);
+                      }}
+                      placeholder="Leave blank to keep unchanged"
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Retype Password
+                    <input
+                      className={styles.input}
+                      type="password"
+                      value={editStudentPasswordConfirm}
+                      onChange={(event) => {
+                        setEditStudentPasswordConfirm(event.target.value);
+                        setEditLoginError(null);
+                      }}
+                      placeholder="Leave blank to keep unchanged"
+                    />
+                  </label>
                 </div>
               </div>
             </div>
             <div className={styles.modalFooter}>
               <div>
+                {editLoginError ? <div className={styles.error}>{editLoginError}</div> : null}
                 {editSaveMessage ? (
                   <div
                     className={

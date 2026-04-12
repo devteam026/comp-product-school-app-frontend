@@ -11,6 +11,8 @@ import HomeDashboard from "./HomeDashboard";
 import EmployeeManagement from "./EmployeeManagement";
 import TimetableManagement from "./TimetableManagement";
 import LeaveManagement from "./LeaveManagement";
+import TransportManagement from "./TransportManagement";
+import HostelManagement from "./HostelManagement";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -20,6 +22,8 @@ const menuItems = [
   "Student Management",
   "Employee Management",
   "Timetable Management",
+  "Transport Management",
+  "Hostel Management",
   "Attendance Management",
   "Fee Management",
   "Leave Management",
@@ -59,12 +63,16 @@ export default function HomeShell({
   const role = displayRole.toLowerCase();
   const navItems = useMemo(() => {
     let items = menuItems;
-    if (role === "teacher") {
+    if (role !== "admin" && role !== "accountant") {
       items = items.filter((item) => item !== "Fee Management");
     }
     if (role !== "admin") {
       items = items.filter(
-        (item) => item !== "Employee Management" && item !== "Timetable Management"
+        (item) =>
+          item !== "Employee Management" &&
+          item !== "Timetable Management" &&
+          item !== "Transport Management" &&
+          item !== "Hostel Management"
       );
     }
     return items;
@@ -175,6 +183,8 @@ export default function HomeShell({
     "Student Management": "Add and track students in one place.",
     "Employee Management": "Manage staff records and documents.",
     "Timetable Management": "Assign teachers to classes and periods.",
+    "Transport Management": "Manage transport routes, vehicles, and drivers.",
+    "Hostel Management": "Manage hostel rooms and allocations.",
     "Attendance Management": "Track daily attendance for each class.",
     "Fee Management": "Manage monthly fees, payments, and reports.",
     "Leave Management": "Apply for leave and manage approvals.",
@@ -212,14 +222,26 @@ export default function HomeShell({
         section: student.section,
         gender: student.gender,
         dateOfBirth: student.dateOfBirth,
-        admissionNumber: student.admissionNumber,
+        admissionNumber: student.admissionNumber || null,
+        registerNo: student.registerNo ?? "",
         rollNumber: student.rollNumber,
         address: student.address,
+        session: student.session ?? "",
+        fatherName: student.fatherName ?? "",
+        motherName: student.motherName ?? "",
         parentName: student.parentName,
         parentRelation: student.parentRelation,
         parentPhone: student.parentPhone,
+        parentWhatsapp: student.parentWhatsapp ?? "",
         parentEmail: student.parentEmail,
         parentOccupation: student.parentOccupation,
+        transportRequired: student.transportRequired ?? false,
+        transportRoute: student.transportRoute ?? "",
+        transportVehicleNo: student.transportVehicleNo ?? "",
+        transportStopName: student.transportStopName ?? "",
+        previousSchoolName: student.previousSchoolName ?? "",
+        previousQualification: student.previousQualification ?? "",
+        studentPassword: student.studentPassword ?? "",
         status: student.status,
         feeType: student.feeType,
         profilePhotoKey: student.profilePhotoKey,
@@ -232,10 +254,11 @@ export default function HomeShell({
       },
       body: JSON.stringify(payload),
     });
+    const data = response.ok ? await response.json().catch(() => null) : null;
     if (response.ok) {
       fetchStudents(activeClass);
     }
-    return response.ok;
+    return { ok: response.ok, student: data };
   };
 
   useEffect(() => {
@@ -371,53 +394,59 @@ export default function HomeShell({
             </div>
           </header>
 
-          {showNoClassNotice ? (
-            <div className={styles.notice}>
-              No classes are assigned to your account yet. Please contact the admin.
-            </div>
-          ) : null}
+          <div className={styles.contentBody}>
+            {showNoClassNotice ? (
+              <div className={styles.notice}>
+                No classes are assigned to your account yet. Please contact the admin.
+              </div>
+            ) : null}
 
-          {activeItem === "Home" ? (
-            <HomeDashboard
-              students={visibleStudents}
-              role={role}
-              dashboardData={dashboardData}
-              isLoading={isDashboardLoading}
-            />
-          ) : activeItem === "Student Management" ? (
-            <StudentManagement
-              students={visibleStudents}
-              onAddStudent={handleAddStudent}
-              role={role}
-              username={username}
-              classCode={activeClass}
-              isLoading={isStudentsLoading}
-            />
-          ) : activeItem === "Employee Management" ? (
-            <EmployeeManagement />
-          ) : activeItem === "Timetable Management" ? (
-            <TimetableManagement
-              activeClassCode={activeClass}
-              onSelectClass={(classCode) => setActiveClass(classCode)}
-            />
-          ) : activeItem === "Leave Management" ? (
-            <LeaveManagement role={role} />
-          ) : activeItem === "Attendance Management" ? (
-            <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
-          ) : activeItem === "Fee Management" ? (
-            <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
-          ) : (
-            <AIEngine
-              classCode={activeClass === "all" ? undefined : activeClass}
-              onStudentClick={(name) => {
-                const match = visibleStudents.find((student) => student.name === name);
-                if (match) {
-                  setSelectedProfile(match);
-                }
-              }}
-              isLoading={isStudentsLoading}
-            />
-          )}
+            {activeItem === "Home" ? (
+              <HomeDashboard
+                students={visibleStudents}
+                role={role}
+                dashboardData={dashboardData}
+                isLoading={isDashboardLoading}
+              />
+            ) : activeItem === "Student Management" ? (
+              <StudentManagement
+                students={visibleStudents}
+                onAddStudent={handleAddStudent}
+                role={role}
+                username={username}
+                classCode={activeClass}
+                isLoading={isStudentsLoading}
+              />
+            ) : activeItem === "Employee Management" ? (
+              <EmployeeManagement />
+            ) : activeItem === "Timetable Management" ? (
+              <TimetableManagement
+                activeClassCode={activeClass}
+                onSelectClass={(classCode) => setActiveClass(classCode)}
+              />
+            ) : activeItem === "Transport Management" ? (
+              <TransportManagement />
+            ) : activeItem === "Hostel Management" ? (
+              <HostelManagement activeClassCode={activeClass} />
+            ) : activeItem === "Leave Management" ? (
+              <LeaveManagement role={role} />
+            ) : activeItem === "Attendance Management" ? (
+              <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
+            ) : activeItem === "Fee Management" ? (
+              <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
+            ) : (
+              <AIEngine
+                classCode={activeClass === "all" ? undefined : activeClass}
+                onStudentClick={(name) => {
+                  const match = visibleStudents.find((student) => student.name === name);
+                  if (match) {
+                    setSelectedProfile(match);
+                  }
+                }}
+                isLoading={isStudentsLoading}
+              />
+            )}
+          </div>
         </main>
       </div>
 

@@ -70,8 +70,8 @@ const emptyTeacherDetails = (): TeacherDetails => ({
   classTeacher: false,
 });
 
-const departmentOptions = ["Teaching", "Accounts", "Admin", "Transport"] as const;
-const designationOptions = ["Teacher", "Accountant", "Clerk", "Driver"] as const;
+const departmentOptions = ["Teaching", "Accounts", "Admin", "Transport","Hostel"] as const;
+const designationOptions = ["Teacher", "Accountant", "Clerk", "Driver","Warden","Caretaker","security","mess staff"] as const;
 const employmentTypeOptions = ["Full-time", "Part-time", "Contract"] as const;
 
 const sanitizeDigits = (value: string, maxLen: number) =>
