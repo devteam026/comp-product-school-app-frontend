@@ -197,6 +197,20 @@ export default function StudentManagement({
     "idle" | "saving" | "success" | "error"
   >("idle");
   const [editSaveMessage, setEditSaveMessage] = useState<string | null>(null);
+  const [addSaveMessage, setAddSaveMessage] = useState<string | null>(null);
+  const [addSaveStatus, setAddSaveStatus] = useState<"success" | "error" | null>(null);
+
+  const showAddMessage = (text: string, type: "success" | "error" = "success") => {
+    setAddSaveMessage(text);
+    setAddSaveStatus(type);
+    setTimeout(() => { setAddSaveMessage(null); setAddSaveStatus(null); }, 4000);
+  };
+
+  const showEditMessage = (text: string, status: "success" | "error") => {
+    setEditSaveMessage(text);
+    setEditSaveStatus(status);
+    setTimeout(() => { setEditSaveMessage(null); setEditSaveStatus("idle"); }, 4000);
+  };
 
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
@@ -602,6 +616,7 @@ export default function StudentManagement({
       previousQualification: previousQualification.trim(),
       studentPassword: enableStudentLogin ? studentPassword : "",
       status: "Active",
+      feeType: "Paid",
       history: ["Student record created"],
       profilePhotoKey: profilePhotoKey ?? undefined,
     };
@@ -617,6 +632,10 @@ export default function StudentManagement({
           hostelRoomNo.trim()
         );
       }
+      showAddMessage(`Student "${trimmedName}" added successfully.`);
+    } else {
+      showAddMessage("Failed to add student. Please try again.", "error");
+      return;
     }
     setName("");
     setGrade("");
@@ -664,30 +683,18 @@ export default function StudentManagement({
     setPhotoUploading(true);
     try {
       const token = window.localStorage.getItem("authToken");
-      const uploadRequest = await fetch(
-        apiUrl(
-          `/api/students/photo-upload?contentType=${encodeURIComponent(
-            file.type
-          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
-        ),
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRequest = await fetch(apiUrl("/api/students/photo-upload"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
       if (!uploadRequest.ok) {
         const err = await uploadRequest.json().catch(() => ({}));
-        throw new Error(err?.error ?? "Unable to start upload");
+        throw new Error(err?.error ?? "Unable to upload photo");
       }
-      const { uploadUrl, objectKey } = await uploadRequest.json();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
-      }
+      const { objectKey } = await uploadRequest.json();
       setProfilePhotoKey(objectKey);
       setPhotoPreview(URL.createObjectURL(file));
     } catch (err) {
@@ -792,11 +799,9 @@ export default function StudentManagement({
         editState.hostelName.trim(),
         editState.hostelRoomNo.trim()
       );
-      setEditSaveStatus("success");
-      setEditSaveMessage("Student updated successfully.");
+      showEditMessage("Student updated successfully.", "success");
     } else {
-      setEditSaveStatus("error");
-      setEditSaveMessage("Unable to save changes. Please try again.");
+      showEditMessage("Unable to save changes. Please try again.", "error");
     }
   };
 
@@ -885,6 +890,7 @@ export default function StudentManagement({
         previousSchoolName: record.previousSchoolName ?? "",
         previousQualification: record.previousQualification ?? "",
         status: record.status === "Inactive" ? "Inactive" : "Active",
+        feeType: (record.feeType === "Free" ? "Free" : "Paid") as "Paid" | "Free",
         history: ["Imported from CSV"],
       };
       void onAddStudent(newStudent);
@@ -903,30 +909,18 @@ export default function StudentManagement({
     setEditPhotoUploading(true);
     try {
       const token = window.localStorage.getItem("authToken");
-      const uploadRequest = await fetch(
-        apiUrl(
-          `/api/students/photo-upload?contentType=${encodeURIComponent(
-            file.type
-          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
-        ),
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRequest = await fetch(apiUrl("/api/students/photo-upload"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
       if (!uploadRequest.ok) {
         const err = await uploadRequest.json().catch(() => ({}));
-        throw new Error(err?.error ?? "Unable to start upload");
+        throw new Error(err?.error ?? "Unable to upload photo");
       }
-      const { uploadUrl, objectKey } = await uploadRequest.json();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
-      }
+      const { objectKey } = await uploadRequest.json();
       setEditState({ ...editState, profilePhotoKey: objectKey });
       setEditPhotoPreview(URL.createObjectURL(file));
     } catch (err) {
@@ -1503,6 +1497,12 @@ export default function StudentManagement({
           ) : null}
           {studentLoginError ? (
             <div className={styles.error}>{studentLoginError}</div>
+          ) : null}
+
+          {addSaveMessage ? (
+            <div className={addSaveStatus === "error" ? styles.error : styles.saveMessage}>
+              {addSaveMessage}
+            </div>
           ) : null}
 
           <button className={styles.button} type="submit">

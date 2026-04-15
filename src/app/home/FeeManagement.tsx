@@ -1495,8 +1495,8 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               >
                 <option value="">Select student</option>
                 {(paymentClassFilter
-                  ? students.filter((s) => s.classCode === paymentClassFilter)
-                  : students
+                  ? (feeStudents.length ? feeStudents : students).filter((s) => s.classCode === paymentClassFilter)
+                  : (feeStudents.length ? feeStudents : students)
                 ).map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.classCode})
@@ -1530,18 +1530,39 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 </div>
 
                 {/* One block per month */}
-                {duesByMonth.map((group) => (
+                {duesByMonth.map((group) => {
+                  const monthPaid = group.dues
+                    .reduce((sum, d) => {
+                      const original = parseFloat(d.amount || "0");
+                      const remaining = parseFloat(d.remainingAmount || "0");
+                      return sum + Math.max(original - remaining, 0);
+                    }, 0)
+                    .toFixed(2);
+                  const hasPartial = group.dues.some((d) => d.status === "PARTIAL");
+                  return (
                   <div key={group.label} className={styles.monthGroup}>
                     <div className={styles.monthGroupHeader}>
-                      <span className={styles.monthGroupLabel}>{group.label}</span>
-                      <span className={styles.monthGroupTotal}>₹ {group.monthTotal}</span>
-                      <button
-                        className={styles.payMonthButton}
-                        type="button"
-                        onClick={() => setPaymentForm({ ...paymentForm, paidAmount: group.monthTotal })}
-                      >
-                        Pay this month
-                      </button>
+                      <div>
+                        <span className={styles.monthGroupLabel}>{group.label}</span>
+                        {hasPartial && parseFloat(monthPaid) > 0 && (
+                          <span className={styles.monthPaidNote}>
+                            ₹ {monthPaid} already paid
+                          </span>
+                        )}
+                      </div>
+                      <div className={styles.monthGroupActions}>
+                        <span className={styles.monthGroupTotal}>
+                          ₹ {group.monthTotal}
+                          <span className={styles.monthGroupTotalLabel}> remaining</span>
+                        </span>
+                        <button
+                          className={styles.payMonthButton}
+                          type="button"
+                          onClick={() => setPaymentForm({ ...paymentForm, paidAmount: group.monthTotal })}
+                        >
+                          Pay remaining
+                        </button>
+                      </div>
                     </div>
                     <div className={styles.tableResponsive}>
                       <table className={styles.table}>
@@ -1550,17 +1571,29 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                             <th>Fee Type</th>
                             <th>Due Date</th>
                             <th>Original</th>
+                            <th>Already Paid</th>
                             <th>Remaining</th>
                             <th>Status</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {group.dues.map((due) => (
+                          {group.dues.map((due) => {
+                            const original = parseFloat(due.amount || "0");
+                            const remaining = parseFloat(due.remainingAmount || "0");
+                            const alreadyPaid = Math.max(original - remaining, 0).toFixed(2);
+                            return (
                             <tr key={due.id}>
                               <td>{feeTypeMap.get(due.feeTypeId)?.name ?? `Type ${due.feeTypeId}`}</td>
                               <td>{due.dueDate}</td>
-                              <td>₹ {parseFloat(due.amount).toFixed(2)}</td>
-                              <td>₹ {parseFloat(due.remainingAmount).toFixed(2)}</td>
+                              <td>₹ {original.toFixed(2)}</td>
+                              <td>
+                                {parseFloat(alreadyPaid) > 0 ? (
+                                  <span className={styles.paidAmountCell}>₹ {alreadyPaid}</span>
+                                ) : (
+                                  <span className={styles.nilCell}>—</span>
+                                )}
+                              </td>
+                              <td>₹ {remaining.toFixed(2)}</td>
                               <td>
                                 <span className={
                                   due.status === "UNPAID" ? styles.badgeUnpaid :
@@ -1571,12 +1604,14 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                                 </span>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : null}

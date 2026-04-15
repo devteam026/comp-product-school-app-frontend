@@ -21,7 +21,7 @@ export default function StudentProfileModal({
   const historyEntries =
     student.historyEntries && student.historyEntries.length > 0
       ? student.historyEntries
-      : student.history.map((entry) => ({ entry }));
+      : student.history.map((entry) => ({ entry, createdAt: undefined }));
 
   const formatTimestamp = (value?: string | null) => {
     if (!value) return null;

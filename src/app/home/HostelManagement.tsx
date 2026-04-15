@@ -115,6 +115,14 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
   const [allocationPage, setAllocationPage] = useState(1);
   const [allocationPageSize, setAllocationPageSize] = useState(25);
   const [allocationError, setAllocationError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessageType, setSaveMessageType] = useState<"success" | "error">("success");
+
+  const showSaveMessage = (text: string, type: "success" | "error" = "success") => {
+    setSaveMessage(text);
+    setSaveMessageType(type);
+    setTimeout(() => setSaveMessage(null), 4000);
+  };
 
   const token = typeof window !== "undefined" ? window.localStorage.getItem("authToken") : null;
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -192,13 +200,9 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
     });
   }, [hostels, rooms, allocations]);
 
-  const wardenOptions = useMemo(
-    () =>
-      employees.filter((emp) =>
-        (emp.department ?? "").toLowerCase().includes("hostel")
-      ),
-    [employees]
-  );
+  // Show all employees as potential wardens — not just those with "hostel" in their department,
+  // since most schools won't label any department exactly that way.
+  const wardenOptions = useMemo(() => employees, [employees]);
 
 
   const hostelStudentRows = useMemo(() => {
@@ -639,20 +643,6 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
                   />
                 </label>
                 <label className={styles.label}>
-                  School ID
-                  <input
-                    className={styles.input}
-                    type="number"
-                    value={hostelForm.schoolId ?? 0}
-                    onChange={(event) =>
-                      setHostelForm({
-                        ...hostelForm,
-                        schoolId: Number(event.target.value),
-                      })
-                    }
-                  />
-                </label>
-                <label className={styles.label}>
                   Address
                   <input
                     className={styles.input}
@@ -663,29 +653,40 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
                   />
                 </label>
               </div>
+              {saveMessage ? (
+                <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+                  {saveMessage}
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (!hostelForm.name.trim()) {
+                    showSaveMessage("Hostel name is required.", "error");
+                    return;
+                  }
+                  // Sanitize: send null for 0 IDs so the DB doesn't receive invalid foreign key values
+                  const body = {
+                    ...hostelForm,
+                    wardenId: hostelForm.wardenId || null,
+                    schoolId: hostelForm.schoolId || null,
+                  };
                   saveEntity(
                     hostelForm.id
                       ? `/api/hostels/manage/${hostelForm.id}`
                       : "/api/hostels/manage",
                     hostelForm.id ? "PUT" : "POST",
-                    hostelForm
-                  ).then(() =>
-                    setHostelForm({
-                      id: 0,
-                      name: "",
-                      type: "BOYS",
-                      capacity: 0,
-                      wardenId: 0,
-                      contactNumber: "",
-                      address: "",
-                      schoolId: 0,
-                    })
-                  )
-                }
+                    body
+                  ).then((result) => {
+                    if (result.ok) {
+                      showSaveMessage(hostelForm.id ? "Hostel updated." : "Hostel saved.");
+                      setHostelForm({ id: 0, name: "", type: "BOYS", capacity: 0, wardenId: 0, contactNumber: "", address: "", schoolId: 0 });
+                    } else {
+                      showSaveMessage(result.error ?? "Failed to save hostel.", "error");
+                    }
+                  });
+                }}
               >
                 {hostelForm.id ? "Update Hostel" : "Save Hostel"}
               </button>
@@ -699,7 +700,6 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
                       <th>Capacity</th>
                       <th>Warden</th>
                       <th>Contact</th>
-                      <th>School</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -712,7 +712,6 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
                         <td>{hostel.capacity ?? "-"}</td>
                         <td>{hostel.wardenId ?? "-"}</td>
                         <td>{hostel.contactNumber ?? "-"}</td>
-                        <td>{hostel.schoolId ?? "-"}</td>
                         <td className={styles.actionRow}>
                           <button
                             className={styles.inlineButton}
@@ -850,22 +849,60 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
                       : "/api/hostels/manage/rooms",
                     roomForm.id ? "PUT" : "POST",
                     roomForm
-                  ).then(() =>
-                    setRoomForm({
-                      id: 0,
-                      hostelId: 0,
-                      roomNumber: "",
-                      floor: 0,
-                      roomType: "SINGLE",
-                      capacity: 0,
-                      currentOccupancy: 0,
-                      status: "AVAILABLE",
-                    })
-                  )
+                  ).then((result) => {
+                    if (result.ok) {
+                      showSaveMessage(roomForm.id ? "Room updated." : "Room saved.");
+                      setRoomForm({ id: 0, hostelId: 0, roomNumber: "", floor: 0, roomType: "SINGLE", capacity: 0, currentOccupancy: 0, status: "AVAILABLE" });
+                    } else {
+                      showSaveMessage(result.error ?? "Failed to save room.", "error");
+                    }
+                  })
                 }
               >
                 {roomForm.id ? "Update Room" : "Save Room"}
               </button>
+              <div className={styles.filterRow}>
+                <input
+                  className={styles.searchInput}
+                  type="search"
+                  placeholder="Search room number, hostel, floor..."
+                  value={roomSearch}
+                  onChange={(event) => setRoomSearch(event.target.value)}
+                  style={{ flex: 1, minWidth: 180 }}
+                />
+                <select
+                  className={styles.inlineSelect}
+                  value={roomHostelFilter}
+                  onChange={(event) => setRoomHostelFilter(event.target.value)}
+                >
+                  <option value="all">All Hostels</option>
+                  {hostels.map((hostel) => (
+                    <option key={hostel.id} value={String(hostel.id)}>
+                      {hostel.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className={styles.inlineSelect}
+                  value={roomTypeFilter}
+                  onChange={(event) => setRoomTypeFilter(event.target.value)}
+                >
+                  <option value="all">All Types</option>
+                  {roomTypes.map((type) => (
+                    <option key={type} value={type.toLowerCase()}>{type}</option>
+                  ))}
+                </select>
+                <select
+                  className={styles.inlineSelect}
+                  value={roomStatusFilter}
+                  onChange={(event) => setRoomStatusFilter(event.target.value)}
+                >
+                  <option value="all">All Statuses</option>
+                  {roomStatuses.map((status) => (
+                    <option key={status} value={status.toLowerCase()}>{status}</option>
+                  ))}
+                </select>
+              </div>
               <div className={styles.tableResponsive}>
                 <table className={styles.table}>
                   <thead>
@@ -1111,38 +1148,69 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
               </select>
             </label>
           </div>
-          <button
-            className={styles.button}
-            type="button"
-            onClick={async () => {
-              setAllocationError(null);
-              const result = await saveEntity(
-                allocationForm.id
-                  ? `/api/hostels/manage/allocations/${allocationForm.id}`
-                  : "/api/hostels/manage/allocations",
-                allocationForm.id ? "PUT" : "POST",
-                allocationForm
-              );
-              if (result.ok) {
-                setAllocationForm({
-                  id: 0,
-                  studentId: "",
-                  hostelId: 0,
-                  roomId: 0,
-                  bedNumber: "",
-                  allocationDate: "",
-                  vacateDate: "",
-                  status: "ACTIVE",
-                });
-              } else {
-                setAllocationError(result.error);
-              }
-            }}
-          >
-            {allocationForm.id ? "Update Allocation" : "Save Allocation"}
-          </button>
+          <div className={styles.formActions}>
+            <button
+              className={styles.button}
+              type="button"
+              onClick={async () => {
+                setAllocationError(null);
+                const result = await saveEntity(
+                  allocationForm.id
+                    ? `/api/hostels/manage/allocations/${allocationForm.id}`
+                    : "/api/hostels/manage/allocations",
+                  allocationForm.id ? "PUT" : "POST",
+                  allocationForm
+                );
+                if (result.ok) {
+                  setAllocationForm({
+                    id: 0,
+                    studentId: "",
+                    hostelId: 0,
+                    roomId: 0,
+                    bedNumber: "",
+                    allocationDate: "",
+                    vacateDate: "",
+                    status: "ACTIVE",
+                  });
+                  setAllocationError(null);
+                  showSaveMessage(allocationForm.id ? "Allocation updated." : "Allocation saved.");
+                } else {
+                  setAllocationError(result.error);
+                  showSaveMessage(result.error ?? "Failed to save allocation.", "error");
+                }
+              }}
+            >
+              {allocationForm.id ? "Update Allocation" : "Save Allocation"}
+            </button>
+            {allocationForm.id ? (
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => {
+                  setAllocationForm({
+                    id: 0,
+                    studentId: "",
+                    hostelId: 0,
+                    roomId: 0,
+                    bedNumber: "",
+                    allocationDate: "",
+                    vacateDate: "",
+                    status: "ACTIVE",
+                  });
+                  setAllocationError(null);
+                }}
+              >
+                Cancel Edit
+              </button>
+            ) : null}
+          </div>
           {allocationError ? (
             <div className={styles.error}>{allocationError}</div>
+          ) : null}
+          {saveMessage && !allocationError ? (
+            <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+              {saveMessage}
+            </div>
           ) : null}
           <div className={styles.listToolbar}>
             <input
@@ -1183,25 +1251,21 @@ export default function HostelManagement({ activeClassCode }: HostelManagementPr
                       <button
                         className={styles.inlineButton}
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          const raw = allocations.find((item) => item.id === allocation.id);
+                          if (!raw) return;
+                          setAllocationError(null);
                           setAllocationForm({
-                            id: allocation.id,
-                            studentId: allocations.find((item) => item.id === allocation.id)
-                              ?.studentId ?? "",
-                            hostelId: allocations.find((item) => item.id === allocation.id)
-                              ?.hostelId ?? 0,
-                            roomId: allocations.find((item) => item.id === allocation.id)
-                              ?.roomId ?? 0,
-                            bedNumber: allocations.find((item) => item.id === allocation.id)
-                              ?.bedNumber ?? "",
-                            allocationDate: allocations.find((item) => item.id === allocation.id)
-                              ?.allocationDate ?? "",
-                            vacateDate: allocations.find((item) => item.id === allocation.id)
-                              ?.vacateDate ?? "",
-                            status: allocations.find((item) => item.id === allocation.id)
-                              ?.status ?? "ACTIVE",
-                          })
-                        }
+                            id: raw.id,
+                            studentId: raw.studentId ?? "",
+                            hostelId: raw.hostelId ?? 0,
+                            roomId: raw.roomId ?? 0,
+                            bedNumber: raw.bedNumber ?? "",
+                            allocationDate: raw.allocationDate ?? "",
+                            vacateDate: raw.vacateDate ?? "",
+                            status: raw.status ?? "ACTIVE",
+                          });
+                        }}
                       >
                         Edit
                       </button>

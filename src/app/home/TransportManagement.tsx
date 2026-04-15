@@ -115,7 +115,7 @@ export default function TransportManagement() {
   const [loading, setLoading] = useState(false);
 
   const [routeForm, setRouteForm] = useState({ id: 0, name: "", active: true });
-  const [vehicleForm, setVehicleForm] = useState({
+  const [vehicleForm, setVehicleForm] = useState<TransportVehicle>({
     id: 0,
     vehicleNo: "",
     vehicleType: "Bus",
@@ -138,7 +138,7 @@ export default function TransportManagement() {
   const [vehicleSelectedFiles, setVehicleSelectedFiles] = useState<Record<string, string>>(
     {}
   );
-  const [driverForm, setDriverForm] = useState({
+  const [driverForm, setDriverForm] = useState<TransportDriver>({
     id: 0,
     name: "",
     phone: "",
@@ -147,7 +147,7 @@ export default function TransportManagement() {
     licenseNo: "",
     active: true,
   });
-  const [stoppageForm, setStoppageForm] = useState({
+  const [stoppageForm, setStoppageForm] = useState<TransportStoppage>({
     id: 0,
     routeName: "",
     stopName: "",
@@ -164,6 +164,15 @@ export default function TransportManagement() {
     driverId: 0,
     active: true,
   });
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessageType, setSaveMessageType] = useState<"success" | "error">("success");
+
+  const showSaveMessage = (text: string, type: "success" | "error" = "success") => {
+    setSaveMessage(text);
+    setSaveMessageType(type);
+    setTimeout(() => setSaveMessage(null), 4000);
+  };
+
   const token = typeof window !== "undefined" ? window.localStorage.getItem("authToken") : null;
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
@@ -255,8 +264,11 @@ export default function TransportManagement() {
       body: JSON.stringify(body),
     });
     if (response.ok) {
-      loadAll();
+      await loadAll();
+      return { ok: true as const };
     }
+    const err = await response.json().catch(() => ({}));
+    return { ok: false as const, error: (err?.error ?? err?.message ?? "Save failed") as string };
   };
 
   const deleteEntity = async (url: string) => {
@@ -620,17 +632,27 @@ export default function TransportManagement() {
                   </select>
                 </label>
               </div>
+              {saveMessage ? (
+                <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+                  {saveMessage}
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
                 onClick={() =>
                   saveEntity(
-                    routeForm.id
-                      ? `/api/transport/routes/${routeForm.id}`
-                      : "/api/transport/routes",
+                    routeForm.id ? `/api/transport/routes/${routeForm.id}` : "/api/transport/routes",
                     routeForm.id ? "PUT" : "POST",
                     routeForm
-                  ).then(() => setRouteForm({ id: 0, name: "", active: true }))
+                  ).then((result) => {
+                    if (result.ok) {
+                      showSaveMessage(routeForm.id ? "Route updated." : "Route saved.");
+                      setRouteForm({ id: 0, name: "", active: true });
+                    } else {
+                      showSaveMessage(result.error ?? "Failed to save route.", "error");
+                    }
+                  })
                 }
               >
                 {routeForm.id ? "Update Route" : "Save Route"}
@@ -870,31 +892,18 @@ export default function TransportManagement() {
                 type="button"
                 onClick={() =>
                   saveEntity(
-                    vehicleForm.id
-                      ? `/api/transport/vehicles/${vehicleForm.id}`
-                      : "/api/transport/vehicles",
+                    vehicleForm.id ? `/api/transport/vehicles/${vehicleForm.id}` : "/api/transport/vehicles",
                     vehicleForm.id ? "PUT" : "POST",
                     vehicleForm
-                  ).then(() => {
-                    setVehicleForm({
-                      id: 0,
-                      vehicleNo: "",
-                      vehicleType: "Bus",
-                      capacity: 0,
-                      insuranceNumber: "",
-                      insuranceExpiryDate: "",
-                      fitnessExpiryDate: "",
-                      pollutionExpiryDate: "",
-                      permitNumber: "",
-                      permitExpiryDate: "",
-                      insuranceDocKey: "",
-                      fitnessDocKey: "",
-                      pollutionDocKey: "",
-                      permitDocKey: "",
-                      active: true,
-                    });
-                    setVehicleUploadStatus({});
-                    setVehicleSelectedFiles({});
+                  ).then((result) => {
+                    if (result.ok) {
+                      showSaveMessage(vehicleForm.id ? "Vehicle updated." : "Vehicle saved.");
+                      setVehicleForm({ id: 0, vehicleNo: "", vehicleType: "Bus", capacity: 0, insuranceNumber: "", insuranceExpiryDate: "", fitnessExpiryDate: "", pollutionExpiryDate: "", permitNumber: "", permitExpiryDate: "", insuranceDocKey: "", fitnessDocKey: "", pollutionDocKey: "", permitDocKey: "", active: true });
+                      setVehicleUploadStatus({});
+                      setVehicleSelectedFiles({});
+                    } else {
+                      showSaveMessage(result.error ?? "Failed to save vehicle.", "error");
+                    }
                   })
                 }
               >
@@ -1100,22 +1109,17 @@ export default function TransportManagement() {
                 type="button"
                 onClick={() =>
                   saveEntity(
-                    driverForm.id
-                      ? `/api/transport/drivers/${driverForm.id}`
-                      : "/api/transport/drivers",
+                    driverForm.id ? `/api/transport/drivers/${driverForm.id}` : "/api/transport/drivers",
                     driverForm.id ? "PUT" : "POST",
                     driverForm
-                  ).then(() => {
-                    setDriverForm({
-                      id: 0,
-                      name: "",
-                      phone: "",
-                      alternatePhone: "",
-                      bloodGroup: "",
-                      licenseNo: "",
-                      active: true,
-                    });
-                    setSelectedTransportEmployeeId("");
+                  ).then((result) => {
+                    if (result.ok) {
+                      showSaveMessage(driverForm.id ? "Driver updated." : "Driver saved.");
+                      setDriverForm({ id: 0, name: "", phone: "", alternatePhone: "", bloodGroup: "", licenseNo: "", active: true });
+                      setSelectedTransportEmployeeId("");
+                    } else {
+                      showSaveMessage(result.error ?? "Failed to save driver.", "error");
+                    }
                   })
                 }
               >
@@ -1289,18 +1293,14 @@ export default function TransportManagement() {
                       : "/api/transport/stoppages",
                     stoppageForm.id ? "PUT" : "POST",
                     stoppageForm
-                  ).then(() =>
-                    setStoppageForm({
-                      id: 0,
-                      routeName: "",
-                      stopName: "",
-                      checkInTime: "",
-                      checkOutTime: "",
-                      feeAmount: 0,
-                      distanceKm: 0,
-                      active: true,
-                    })
-                  )
+                  ).then((result) => {
+                    if (result.ok) {
+                      showSaveMessage(stoppageForm.id ? "Stoppage updated." : "Stoppage saved.");
+                      setStoppageForm({ id: 0, routeName: "", stopName: "", checkInTime: "", checkOutTime: "", feeAmount: 0, distanceKm: 0, active: true });
+                    } else {
+                      showSaveMessage(result.error ?? "Failed to save stoppage.", "error");
+                    }
+                  })
                 }
               >
                 {stoppageForm.id ? "Update Stoppage" : "Save Stoppage"}

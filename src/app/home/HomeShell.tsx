@@ -62,7 +62,7 @@ export default function HomeShell({
 
   const role = displayRole.toLowerCase();
   const navItems = useMemo(() => {
-    let items = menuItems;
+    let items: MenuItem[] = [...menuItems];
     if (role !== "admin" && role !== "accountant") {
       items = items.filter((item) => item !== "Fee Management");
     }

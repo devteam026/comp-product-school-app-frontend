@@ -108,7 +108,7 @@ export default function LoginPage() {
       }
 
       if (token) {
-        await fetch("/api/session", {
+        await fetch("/nextapi/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
