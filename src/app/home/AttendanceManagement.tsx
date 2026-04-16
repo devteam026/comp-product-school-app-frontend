@@ -357,7 +357,7 @@ export default function AttendanceManagement({
           {students.length === 0 ? (
             <div className={styles.empty}>No students available.</div>
           ) : (
-            <table className={styles.table}>
+            <div className={styles.tableResponsive}><table className={styles.table}>
               <thead>
                 <tr>
                   <th>Student</th>
@@ -396,7 +396,7 @@ export default function AttendanceManagement({
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
 
           <div className={styles.pagination}>

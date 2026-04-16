@@ -118,8 +118,7 @@ const tabs = [
   "Fee Structure",
   "Generate Dues",
   "Payments",
-  "Discounts",
-  "Fine Rules",
+  "Discounts & Fines",
 ] as const;
 type Tab = (typeof tabs)[number];
 
@@ -980,16 +979,18 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                   </select>
                 </label>
               </div>
-              <button
-                className={`${styles.button} ${savingKey === "feeType" ? styles.buttonLoading : ""}`}
-                type="button"
-                disabled={savingKey === "feeType"}
-                onClick={handleSaveFeeType}
-              >
-                {savingKey === "feeType"
-                  ? feeTypeForm.id ? "Updating…" : "Saving…"
-                  : feeTypeForm.id ? "Update Type" : "Save Type"}
-              </button>
+              <div className={styles.formActions}>
+                <button
+                  className={`${styles.button} ${savingKey === "feeType" ? styles.buttonLoading : ""}`}
+                  type="button"
+                  disabled={savingKey === "feeType"}
+                  onClick={handleSaveFeeType}
+                >
+                  {savingKey === "feeType"
+                    ? feeTypeForm.id ? "Updating…" : "Saving…"
+                    : feeTypeForm.id ? "Update Type" : "Save Type"}
+                </button>
+              </div>
               <div className={styles.tableResponsive}>
                 <table className={styles.table}>
                   <thead>
@@ -1166,16 +1167,18 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
           </div>
-          <button
-            className={`${styles.button} ${savingKey === "feeStructure" ? styles.buttonLoading : ""}`}
-            type="button"
-            disabled={savingKey === "feeStructure"}
-            onClick={handleSaveFeeStructure}
-          >
-            {savingKey === "feeStructure"
-              ? feeStructureForm.id ? "Updating…" : "Saving…"
-              : feeStructureForm.id ? "Update Structure" : "Save Structure"}
-          </button>
+          <div className={styles.formActions}>
+            <button
+              className={`${styles.button} ${savingKey === "feeStructure" ? styles.buttonLoading : ""}`}
+              type="button"
+              disabled={savingKey === "feeStructure"}
+              onClick={handleSaveFeeStructure}
+            >
+              {savingKey === "feeStructure"
+                ? feeStructureForm.id ? "Updating…" : "Saving…"
+                : feeStructureForm.id ? "Update Structure" : "Save Structure"}
+            </button>
+          </div>
           <div className={styles.tableResponsive}>
             <table className={styles.table}>
               <thead>
@@ -1350,7 +1353,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 className={styles.buttonSecondary}
                 type="button"
                 onClick={() => setDueFilters({ studentId: "", status: "all", name: "", month: "" })}
-                style={{ alignSelf: "flex-end" }}
+                style={{ alignSelf: "flex-start" }}
               >
                 Clear Filters
               </button>
@@ -1692,14 +1695,16 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             </label>
           </div>
 
-          <button
-            className={`${styles.button} ${savingKey === "payment" ? styles.buttonLoading : ""}`}
-            type="button"
-            disabled={savingKey === "payment" || studentPendingDues.length === 0}
-            onClick={handlePayment}
-          >
-            {savingKey === "payment" ? "Recording…" : "Record Payment"}
-          </button>
+          <div className={styles.formActions}>
+            <button
+              className={`${styles.button} ${savingKey === "payment" ? styles.buttonLoading : ""}`}
+              type="button"
+              disabled={savingKey === "payment" || studentPendingDues.length === 0}
+              onClick={handlePayment}
+            >
+              {savingKey === "payment" ? "Recording…" : "Record Payment"}
+            </button>
+          </div>
 
           <div className={styles.tableSectionHeader}>
             <div className={styles.sectionTitle} style={{ borderBottom: "none", margin: 0, padding: 0 }}>Payment History</div>
@@ -1731,7 +1736,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 className={styles.buttonSecondary}
                 type="button"
                 onClick={() => setPaymentFilters({ name: "", month: "" })}
-                style={{ alignSelf: "flex-end" }}
+                style={{ alignSelf: "flex-start" }}
               >
                 Clear Filters
               </button>
@@ -1854,7 +1859,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
         </div>
       ) : null}
 
-      {activeTab === "Discounts" ? (
+      {activeTab === "Discounts & Fines" ? (
         <div className={styles.sectionCard}>
           <div className={styles.sectionTitle}>Default Discounts</div>
           <div className={styles.fieldRow}>
@@ -1931,16 +1936,18 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
           </div>
-          <button
-            className={`${styles.button} ${savingKey === "defaultDiscount" ? styles.buttonLoading : ""}`}
-            type="button"
-            disabled={savingKey === "defaultDiscount"}
-            onClick={handleSaveDefaultDiscount}
-          >
-            {savingKey === "defaultDiscount"
-              ? defaultDiscountForm.id ? "Updating…" : "Saving…"
-              : defaultDiscountForm.id ? "Update Discount" : "Save Discount"}
-          </button>
+          <div className={styles.formActions}>
+            <button
+              className={`${styles.button} ${savingKey === "defaultDiscount" ? styles.buttonLoading : ""}`}
+              type="button"
+              disabled={savingKey === "defaultDiscount"}
+              onClick={handleSaveDefaultDiscount}
+            >
+              {savingKey === "defaultDiscount"
+                ? defaultDiscountForm.id ? "Updating…" : "Saving…"
+                : defaultDiscountForm.id ? "Update Discount" : "Save Discount"}
+            </button>
+          </div>
 
           <div className={styles.tableResponsive}>
             <table className={styles.table}>
@@ -2068,16 +2075,18 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
           </div>
-          <button
-            className={`${styles.button} ${savingKey === "studentDiscount" ? styles.buttonLoading : ""}`}
-            type="button"
-            disabled={savingKey === "studentDiscount"}
-            onClick={handleSaveStudentDiscount}
-          >
-            {savingKey === "studentDiscount"
-              ? studentDiscountForm.id ? "Updating…" : "Saving…"
-              : studentDiscountForm.id ? "Update Student Discount" : "Save Student Discount"}
-          </button>
+          <div className={styles.formActions}>
+            <button
+              className={`${styles.button} ${savingKey === "studentDiscount" ? styles.buttonLoading : ""}`}
+              type="button"
+              disabled={savingKey === "studentDiscount"}
+              onClick={handleSaveStudentDiscount}
+            >
+              {savingKey === "studentDiscount"
+                ? studentDiscountForm.id ? "Updating…" : "Saving…"
+                : studentDiscountForm.id ? "Update Student Discount" : "Save Student Discount"}
+            </button>
+          </div>
 
           <div className={styles.tableResponsive}>
             <table className={styles.table}>
@@ -2124,11 +2133,6 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </tbody>
             </table>
           </div>
-        </div>
-      ) : null}
-
-      {activeTab === "Fine Rules" ? (
-        <div className={styles.sectionCard}>
           <div className={styles.sectionTitle}>Fine Rules</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
@@ -2203,16 +2207,18 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
           </div>
-          <button
-            className={`${styles.button} ${savingKey === "fineRule" ? styles.buttonLoading : ""}`}
-            type="button"
-            disabled={savingKey === "fineRule"}
-            onClick={handleSaveFineRule}
-          >
-            {savingKey === "fineRule"
-              ? fineRuleForm.id ? "Updating…" : "Saving…"
-              : fineRuleForm.id ? "Update Fine Rule" : "Save Fine Rule"}
-          </button>
+          <div className={styles.formActions}>
+            <button
+              className={`${styles.button} ${savingKey === "fineRule" ? styles.buttonLoading : ""}`}
+              type="button"
+              disabled={savingKey === "fineRule"}
+              onClick={handleSaveFineRule}
+            >
+              {savingKey === "fineRule"
+                ? fineRuleForm.id ? "Updating…" : "Saving…"
+                : fineRuleForm.id ? "Update Fine Rule" : "Save Fine Rule"}
+            </button>
+          </div>
 
           <div className={styles.tableResponsive}>
             <table className={styles.table}>

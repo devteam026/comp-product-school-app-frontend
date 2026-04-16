@@ -48,6 +48,7 @@ export default function HomeShell({
   const [sidebarBg, setSidebarBg] = useState(envSidebarBg);
   const [brandTitle, setBrandTitle] = useState(envBrandTitle);
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
@@ -300,8 +301,14 @@ export default function HomeShell({
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
+        {mobileMenuOpen && (
+          <div
+            className={styles.sidebarBackdrop}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
         <aside
-          className={styles.sidebar}
+          className={`${styles.sidebar} ${mobileMenuOpen ? styles.sidebarOpen : ""}`}
           style={
             sidebarBg
               ? ({ "--sidebar-bg": sidebarBg } as CSSProperties)
@@ -326,7 +333,7 @@ export default function HomeShell({
                   item === activeItem ? styles.navItemActive : ""
                 }`}
                 type="button"
-                onClick={() => setActiveItem(item)}
+                onClick={() => { setActiveItem(item); setMobileMenuOpen(false); }}
               >
                 {item}
               </button>
@@ -336,9 +343,21 @@ export default function HomeShell({
 
         <main className={styles.content}>
           <header className={styles.header}>
-            <div>
-              <h1 className={styles.title}>{activeItem}</h1>
-              <p className={styles.subtitle}>{subtitleMap[activeItem]}</p>
+            <div className={styles.headerTitle}>
+              <button
+                className={styles.menuToggle}
+                type="button"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                onClick={() => setMobileMenuOpen((prev) => !prev)}
+              >
+                <span />
+                <span />
+                <span />
+              </button>
+              <div>
+                <h1 className={styles.title}>{activeItem}</h1>
+                <p className={styles.subtitle}>{subtitleMap[activeItem]}</p>
+              </div>
             </div>
             <div className={styles.headerActions}>
               {role === "admin" ? (
