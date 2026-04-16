@@ -1886,14 +1886,70 @@
   list-style: none;
 }
 
-/* ── Dashboard toolbar & customize panel ─────────────────────────── */
+/* ── Greeting banner ─────────────────────────────────────────────── */
 
-.dashboardToolbar {
+.greetingBanner {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: 0 0 12px 0;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
 }
+
+.greetingText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.greetingHello {
+  font-size: 16px;
+  font-weight: 700;
+  color: #14532d;
+}
+
+.greetingDate {
+  font-size: 12px;
+  color: #166534;
+  opacity: 0.8;
+}
+
+.greetingActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.markAttendanceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #16a34a;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 150ms ease, transform 100ms ease;
+}
+
+.markAttendanceBtn:hover {
+  background: #15803d;
+}
+
+.markAttendanceBtn:active {
+  transform: scale(0.97);
+}
+
+/* ── Customize panel ─────────────────────────────────────────────── */
 
 .customizeWrap {
   position: relative;

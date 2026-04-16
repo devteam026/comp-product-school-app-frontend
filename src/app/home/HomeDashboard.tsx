@@ -28,9 +28,10 @@ const LS_KEY = "dashboard_widgets_hidden";
 type HomeDashboardProps = {
   students: Student[];
   role: string;
+  username?: string;
   dashboardData?: {
     attendanceToday?: { present: number; absent: number; notRecorded?: number };
-    feeStats?: { paid: number; unpaid: number; free: number; collectedAmount?: number };
+    feeStats?: { paid: number; unpaid: number; partial: number; collectedAmount?: number };
     dailyAttendance?: { day: string; present: number; absent: number }[];
     classAttendance?: { classCode: string; present: number; absent: number }[];
     classStudentCounts?: { classCode: string; present: number; absent: number }[];
@@ -39,14 +40,17 @@ type HomeDashboardProps = {
   } | null;
   isLoading?: boolean;
   onStudentClick?: (student: Student) => void;
+  onNavigate?: (section: string) => void;
 };
 
 export default function HomeDashboard({
   students,
   role,
+  username,
   dashboardData,
   isLoading,
   onStudentClick,
+  onNavigate,
 }: HomeDashboardProps) {
   const activeStudents = useMemo(
     () => students.filter((student) => student.status === "Active"),
@@ -64,7 +68,7 @@ export default function HomeDashboard({
     absent: 0,
     notRecorded: 0,
   };
-  const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, free: 0 };
+  const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, partial: 0 };
   const canSeeFees = role === "admin" || role === "accountant";
   const dailyAttendance = (dashboardData?.dailyAttendance ?? []).slice(-7);
   const classAttendance = dashboardData?.classAttendance ?? [];
@@ -140,10 +144,21 @@ export default function HomeDashboard({
   const pendingLeaveCount = dashboardData?.pendingLeaveCount ?? 0;
   const feeCollectedAmount = dashboardData?.feeStats?.collectedAmount ?? 0;
   const feeCollectionRate = useMemo(() => {
-    const { paid, unpaid } = feeStats;
-    const total = paid + unpaid;
+    const { paid, unpaid, partial } = feeStats;
+    const total = paid + unpaid + partial;
     return total === 0 ? 0 : Math.round((paid / total) * 100);
   }, [feeStats]);
+
+  // Greeting
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+  const todayLabel = useMemo(() =>
+    new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+  []);
 
   // Widget visibility preferences
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<WidgetKey>>(() => {
@@ -245,47 +260,68 @@ export default function HomeDashboard({
 
   return (
     <div className={styles.dashboard}>
-      <div className={styles.dashboardToolbar}>
-        <div ref={customizePanelRef} className={styles.customizeWrap}>
-          <button
-            type="button"
-            className={styles.customizeBtn}
-            onClick={() => setShowCustomize((v) => !v)}
-            aria-expanded={showCustomize}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            Customize
-          </button>
-          {showCustomize && (
-            <div className={styles.customizePanel}>
-              <div className={styles.customizePanelHeader}>
-                <span>Show / Hide Widgets</span>
-                <button type="button" className={styles.customizeClose} onClick={() => setShowCustomize(false)}>✕</button>
-              </div>
-              <ul className={styles.customizeList}>
-                {visibleWidgetOptions.map((w) => {
-                  const isVisible = !hiddenWidgets.has(w.key);
-                  return (
-                    <li key={w.key} className={styles.customizeItem}>
-                      <span className={styles.customizeLabel}>{w.label}</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isVisible}
-                        className={`${styles.toggleSwitch} ${isVisible ? styles.toggleOn : ""}`}
-                        onClick={() => toggleWidget(w.key)}
-                      >
-                        <span className={styles.toggleThumb} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+      <div className={styles.greetingBanner}>
+        <div className={styles.greetingText}>
+          <span className={styles.greetingHello}>
+            {greeting}{username ? `, ${username}` : ""}!
+          </span>
+          <span className={styles.greetingDate}>{todayLabel}</span>
+        </div>
+        <div className={styles.greetingActions}>
+          {(role === "admin" || role === "teacher") && onNavigate && (
+            <button
+              type="button"
+              className={styles.markAttendanceBtn}
+              onClick={() => onNavigate("Attendance Management")}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+              </svg>
+              Mark Attendance
+            </button>
           )}
+          <div ref={customizePanelRef} className={styles.customizeWrap}>
+            <button
+              type="button"
+              className={styles.customizeBtn}
+              onClick={() => setShowCustomize((v) => !v)}
+              aria-expanded={showCustomize}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              Customize
+            </button>
+            {showCustomize && (
+              <div className={styles.customizePanel}>
+                <div className={styles.customizePanelHeader}>
+                  <span>Show / Hide Widgets</span>
+                  <button type="button" className={styles.customizeClose} onClick={() => setShowCustomize(false)}>✕</button>
+                </div>
+                <ul className={styles.customizeList}>
+                  {visibleWidgetOptions.map((w) => {
+                    const isVisible = !hiddenWidgets.has(w.key);
+                    return (
+                      <li key={w.key} className={styles.customizeItem}>
+                        <span className={styles.customizeLabel}>{w.label}</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isVisible}
+                          className={`${styles.toggleSwitch} ${isVisible ? styles.toggleOn : ""}`}
+                          onClick={() => toggleWidget(w.key)}
+                        >
+                          <span className={styles.toggleThumb} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -399,12 +435,12 @@ export default function HomeDashboard({
             <div className={styles.metricSplit}>
               <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>✓ {feeStats.paid} Paid</span>
               <span className={`${styles.metricSplitBadge} ${styles.metricSplitAbsent}`}>✗ {feeStats.unpaid} Unpaid</span>
-              <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>◎ {feeStats.free} Free</span>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>◑ {feeStats.partial} Partial</span>
             </div>
             <div className={styles.metricBar}>
-              <span className={styles.metricFill} style={{ width: `${(feeStats.paid / Math.max(feeStats.paid + feeStats.unpaid + feeStats.free, 1)) * 100}%` }} />
-              <span className={styles.metricFillAlt} style={{ width: `${(feeStats.unpaid / Math.max(feeStats.paid + feeStats.unpaid + feeStats.free, 1)) * 100}%` }} />
-              <span className={styles.metricFillMuted} style={{ width: `${(feeStats.free / Math.max(feeStats.paid + feeStats.unpaid + feeStats.free, 1)) * 100}%` }} />
+              <span className={styles.metricFill} style={{ width: `${(feeStats.paid / Math.max(feeStats.paid + feeStats.unpaid + feeStats.partial, 1)) * 100}%` }} />
+              <span className={styles.metricFillAlt} style={{ width: `${(feeStats.unpaid / Math.max(feeStats.paid + feeStats.unpaid + feeStats.partial, 1)) * 100}%` }} />
+              <span className={styles.metricFillMuted} style={{ width: `${(feeStats.partial / Math.max(feeStats.paid + feeStats.unpaid + feeStats.partial, 1)) * 100}%` }} />
             </div>
           </article>
         ) : null}
@@ -526,7 +562,7 @@ export default function HomeDashboard({
             <p className={styles.metricValue}>{feeCollectionRate}%</p>
             <div className={styles.metricSplit}>
               <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>
-                {feeStats.paid} of {feeStats.paid + feeStats.unpaid} paid
+                {feeStats.paid} of {feeStats.paid + feeStats.unpaid + feeStats.partial} paid
               </span>
               {feeCollectedAmount > 0 && (
                 <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>

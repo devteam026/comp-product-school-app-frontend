@@ -54,7 +54,7 @@ export default function HomeShell({
   const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
   const [dashboardData, setDashboardData] = useState<{
     attendanceToday?: { present: number; absent: number };
-    feeStats?: { paid: number; unpaid: number; free: number };
+    feeStats?: { paid: number; unpaid: number; partial: number };
     dailyAttendance?: { day: string; present: number; absent: number }[];
     classAttendance?: { classCode: string; present: number; absent: number }[];
     classStudentCounts?: { classCode: string; present: number; absent: number }[];
@@ -424,9 +424,11 @@ export default function HomeShell({
               <HomeDashboard
                 students={visibleStudents}
                 role={role}
+                username={username}
                 dashboardData={dashboardData}
                 isLoading={isDashboardLoading}
                 onStudentClick={(student) => setSelectedProfile(student)}
+                onNavigate={(section) => setActiveItem(section as typeof activeItem)}
               />
             ) : activeItem === "Student Management" ? (
               <StudentManagement
