@@ -1,20 +1,44 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "../styles/home.module.css";
 import type { Student } from "./data";
+import { apiUrl } from "../../lib/api";
+
+const WIDGETS = [
+  { key: "totalStudents",       label: "Total Students" },
+  { key: "todayAttendance",     label: "Today's Attendance" },
+  { key: "lowestAttendance",    label: "Lowest Attendance %",  roles: ["admin"] },
+  { key: "feesThisMonth",       label: "Fees This Month",      roles: ["admin", "accountant"] },
+  { key: "transport",           label: "Transport" },
+  { key: "hostel",              label: "Hostel" },
+  { key: "newAdmissions",       label: "New Admissions" },
+  { key: "leaveRequests",       label: "Leave Requests",       roles: ["admin"] },
+  { key: "collectionRate",      label: "Collection Rate",      roles: ["admin", "accountant"] },
+  { key: "dailyAttendance",     label: "Daily Attendance Chart" },
+  { key: "studentsByClass",     label: "Students by Class" },
+  { key: "classAttendanceToday",label: "Class Attendance Today" },
+  { key: "todayAbsentees",      label: "Today's Absentees" },
+] as const;
+
+type WidgetKey = (typeof WIDGETS)[number]["key"];
+
+const LS_KEY = "dashboard_widgets_hidden";
 
 type HomeDashboardProps = {
   students: Student[];
   role: string;
   dashboardData?: {
     attendanceToday?: { present: number; absent: number; notRecorded?: number };
-    feeStats?: { paid: number; unpaid: number; free: number };
+    feeStats?: { paid: number; unpaid: number; free: number; collectedAmount?: number };
     dailyAttendance?: { day: string; present: number; absent: number }[];
     classAttendance?: { classCode: string; present: number; absent: number }[];
     classStudentCounts?: { classCode: string; present: number; absent: number }[];
+    newAdmissionsThisMonth?: number;
+    pendingLeaveCount?: number;
   } | null;
   isLoading?: boolean;
+  onStudentClick?: (student: Student) => void;
 };
 
 export default function HomeDashboard({
@@ -22,6 +46,7 @@ export default function HomeDashboard({
   role,
   dashboardData,
   isLoading,
+  onStudentClick,
 }: HomeDashboardProps) {
   const activeStudents = useMemo(
     () => students.filter((student) => student.status === "Active"),
@@ -41,7 +66,7 @@ export default function HomeDashboard({
   };
   const feeStats = dashboardData?.feeStats ?? { paid: 0, unpaid: 0, free: 0 };
   const canSeeFees = role === "admin" || role === "accountant";
-  const dailyAttendance = dashboardData?.dailyAttendance ?? [];
+  const dailyAttendance = (dashboardData?.dailyAttendance ?? []).slice(-7);
   const classAttendance = dashboardData?.classAttendance ?? [];
   const classStudentCounts = dashboardData?.classStudentCounts ?? [];
   const lowestAttendance = useMemo(() => {
@@ -99,6 +124,95 @@ export default function HomeDashboard({
   });
   const maxDailyValue = Math.max(...dailyAttendance.map((d) => d.present + d.absent), 1);
 
+  // Transport utilization — derived from students prop
+  const transportCount = useMemo(
+    () => activeStudents.filter((s) => s.transportRequired === true).length,
+    [activeStudents]
+  );
+
+  // Hostel occupancy — derived from students prop
+  const hostelCount = useMemo(
+    () => activeStudents.filter((s) => s.hostelRequired === true).length,
+    [activeStudents]
+  );
+
+  const newAdmissionsThisMonth = dashboardData?.newAdmissionsThisMonth ?? 0;
+  const pendingLeaveCount = dashboardData?.pendingLeaveCount ?? 0;
+  const feeCollectedAmount = dashboardData?.feeStats?.collectedAmount ?? 0;
+  const feeCollectionRate = useMemo(() => {
+    const { paid, unpaid } = feeStats;
+    const total = paid + unpaid;
+    return total === 0 ? 0 : Math.round((paid / total) * 100);
+  }, [feeStats]);
+
+  // Widget visibility preferences
+  const [hiddenWidgets, setHiddenWidgets] = useState<Set<WidgetKey>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      return new Set(JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") as WidgetKey[]);
+    } catch { return new Set(); }
+  });
+  const [showCustomize, setShowCustomize] = useState(false);
+  const customizePanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem(LS_KEY, JSON.stringify([...hiddenWidgets]));
+  }, [hiddenWidgets]);
+
+  // Close customize panel on outside click
+  useEffect(() => {
+    if (!showCustomize) return;
+    const handler = (e: MouseEvent) => {
+      if (customizePanelRef.current && !customizePanelRef.current.contains(e.target as Node)) {
+        setShowCustomize(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showCustomize]);
+
+  const toggleWidget = (key: WidgetKey) => {
+    setHiddenWidgets((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+  const hidden = (key: WidgetKey) => hiddenWidgets.has(key);
+
+  // Visible widgets for the customize panel (role-filtered)
+  const visibleWidgetOptions = WIDGETS.filter(
+    (w) => !("roles" in w) || (w as { roles: readonly string[] }).roles.includes(role)
+  );
+
+  // Today's absentees — fetched from attendance API
+  const [absentStudents, setAbsentStudents] = useState<Student[]>([]);
+  const [isAbsenteesLoading, setIsAbsenteesLoading] = useState(false);
+  useEffect(() => {
+    let isActive = true;
+    setIsAbsenteesLoading(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const token = window.localStorage.getItem("authToken");
+    fetch(apiUrl(`/api/attendance?date=${today}`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isActive || !data?.records) return;
+        const absentIds = new Set<string>(
+          (data.records as { studentId: string; status: string }[])
+            .filter((r) => r.status === "Absent")
+            .map((r) => r.studentId)
+        );
+        setAbsentStudents(students.filter((s) => absentIds.has(s.id)));
+      })
+      .catch(() => {})
+      .finally(() => { if (isActive) setIsAbsenteesLoading(false); });
+    return () => { isActive = false; };
+  // re-run when visible students change (e.g. class filter)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students]);
+
   if (isLoading) {
     return (
       <div className={styles.dashboard}>
@@ -131,9 +245,53 @@ export default function HomeDashboard({
 
   return (
     <div className={styles.dashboard}>
+      <div className={styles.dashboardToolbar}>
+        <div ref={customizePanelRef} className={styles.customizeWrap}>
+          <button
+            type="button"
+            className={styles.customizeBtn}
+            onClick={() => setShowCustomize((v) => !v)}
+            aria-expanded={showCustomize}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Customize
+          </button>
+          {showCustomize && (
+            <div className={styles.customizePanel}>
+              <div className={styles.customizePanelHeader}>
+                <span>Show / Hide Widgets</span>
+                <button type="button" className={styles.customizeClose} onClick={() => setShowCustomize(false)}>✕</button>
+              </div>
+              <ul className={styles.customizeList}>
+                {visibleWidgetOptions.map((w) => {
+                  const isVisible = !hiddenWidgets.has(w.key);
+                  return (
+                    <li key={w.key} className={styles.customizeItem}>
+                      <span className={styles.customizeLabel}>{w.label}</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isVisible}
+                        className={`${styles.toggleSwitch} ${isVisible ? styles.toggleOn : ""}`}
+                        onClick={() => toggleWidget(w.key)}
+                      >
+                        <span className={styles.toggleThumb} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+
       <section className={styles.metricGrid}>
         {/* Total Students */}
-        <article className={styles.metricCard}>
+        {!hidden("totalStudents") && <article className={styles.metricCard}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>Total Students</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -160,10 +318,10 @@ export default function HomeDashboard({
               style={{ width: `${totalStudents === 0 ? 0 : (femaleCount / totalStudents) * 100}%` }}
             />
           </div>
-        </article>
+        </article>}
 
         {/* Today's Attendance */}
-        <article className={styles.metricCard}>
+        {!hidden("todayAttendance") && <article className={styles.metricCard}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>Today&apos;s Attendance</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -194,10 +352,10 @@ export default function HomeDashboard({
               style={{ width: `${(attendanceToday.absent / Math.max(attendanceToday.present + attendanceToday.absent, 1)) * 100}%` }}
             />
           </div>
-        </article>
+        </article>}
 
         {/* Lowest Attendance (admin only) */}
-        {role === "admin" ? (
+        {role === "admin" && !hidden("lowestAttendance") ? (
           <article className={styles.metricCard}>
             <div className={styles.metricCardHeader}>
               <h2 className={styles.metricTitle}>Lowest Attendance %</h2>
@@ -226,7 +384,7 @@ export default function HomeDashboard({
         ) : null}
 
         {/* Fee Stats (admin / accountant) */}
-        {canSeeFees ? (
+        {canSeeFees && !hidden("feesThisMonth") ? (
           <article className={styles.metricCard}>
             <div className={styles.metricCardHeader}>
               <h2 className={styles.metricTitle}>Fees This Month</h2>
@@ -250,14 +408,146 @@ export default function HomeDashboard({
             </div>
           </article>
         ) : null}
+
+        {/* Transport Utilization */}
+        {!hidden("transport") && <article className={styles.metricCard}>
+          <div className={styles.metricCardHeader}>
+            <h2 className={styles.metricTitle}>Transport</h2>
+            <div className={styles.metricIconBadge} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="3" width="15" height="13" rx="2"/>
+                <path d="M16 8h4l3 3v5h-7V8z"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/>
+                <circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+            </div>
+          </div>
+          <p className={styles.metricValue}>{transportCount}</p>
+          <div className={styles.metricSplit}>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>🚌 {transportCount} Using transport</span>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>{totalStudents - transportCount} Not enrolled</span>
+          </div>
+          <div className={styles.metricBar}>
+            <span
+              className={styles.metricFill}
+              style={{ width: `${totalStudents === 0 ? 0 : (transportCount / totalStudents) * 100}%` }}
+            />
+            <span
+              className={styles.metricFillMuted}
+              style={{ width: `${totalStudents === 0 ? 0 : ((totalStudents - transportCount) / totalStudents) * 100}%` }}
+            />
+          </div>
+        </article>}
+
+        {/* Hostel Occupancy */}
+        {!hidden("hostel") && <article className={styles.metricCard}>
+          <div className={styles.metricCardHeader}>
+            <h2 className={styles.metricTitle}>Hostel</h2>
+            <div className={styles.metricIconBadge} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+            </div>
+          </div>
+          <p className={styles.metricValue}>{hostelCount}</p>
+          <div className={styles.metricSplit}>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>🏠 {hostelCount} In hostel</span>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>{totalStudents - hostelCount} Day scholars</span>
+          </div>
+          <div className={styles.metricBar}>
+            <span
+              className={styles.metricFill}
+              style={{ width: `${totalStudents === 0 ? 0 : (hostelCount / totalStudents) * 100}%` }}
+            />
+            <span
+              className={styles.metricFillMuted}
+              style={{ width: `${totalStudents === 0 ? 0 : ((totalStudents - hostelCount) / totalStudents) * 100}%` }}
+            />
+          </div>
+        </article>}
+
+        {/* New Admissions This Month */}
+        {!hidden("newAdmissions") && <article className={styles.metricCard}>
+          <div className={styles.metricCardHeader}>
+            <h2 className={styles.metricTitle}>New Admissions</h2>
+            <div className={styles.metricIconBadge} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="8.5" cy="7" r="4"/>
+                <line x1="20" y1="8" x2="20" y2="14"/>
+                <line x1="23" y1="11" x2="17" y2="11"/>
+              </svg>
+            </div>
+          </div>
+          <p className={styles.metricValue}>{newAdmissionsThisMonth}</p>
+          <div className={styles.metricSplit}>
+            <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>This month</span>
+          </div>
+        </article>}
+
+        {/* Pending Leave Requests (admin only) */}
+        {role === "admin" && !hidden("leaveRequests") ? (
+          <article className={styles.metricCard}>
+            <div className={styles.metricCardHeader}>
+              <h2 className={styles.metricTitle}>Leave Requests</h2>
+              <div className={styles.metricIconBadge} aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </div>
+            </div>
+            <p className={styles.metricValue}>{pendingLeaveCount}</p>
+            <div className={styles.metricSplit}>
+              {pendingLeaveCount === 0 ? (
+                <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>All clear</span>
+              ) : (
+                <span className={`${styles.metricSplitBadge} ${styles.metricSplitAbsent}`}>⏳ Pending approval</span>
+              )}
+            </div>
+          </article>
+        ) : null}
+
+        {/* Fee Collection Rate (admin/accountant) */}
+        {canSeeFees && !hidden("collectionRate") ? (
+          <article className={styles.metricCard}>
+            <div className={styles.metricCardHeader}>
+              <h2 className={styles.metricTitle}>Collection Rate</h2>
+              <div className={styles.metricIconBadge} aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                  <polyline points="16 7 22 7 22 13"/>
+                </svg>
+              </div>
+            </div>
+            <p className={styles.metricValue}>{feeCollectionRate}%</p>
+            <div className={styles.metricSplit}>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>
+                {feeStats.paid} of {feeStats.paid + feeStats.unpaid} paid
+              </span>
+              {feeCollectedAmount > 0 && (
+                <span className={`${styles.metricSplitBadge} ${styles.metricSplitMuted}`}>
+                  ₹{Number(feeCollectedAmount).toLocaleString("en-IN")}
+                </span>
+              )}
+            </div>
+            <div className={styles.metricBar}>
+              <span className={styles.metricFill} style={{ width: `${feeCollectionRate}%` }} />
+              <span className={styles.metricFillAlt} style={{ width: `${100 - feeCollectionRate}%` }} />
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <section className={styles.chartGrid}>
-        <article className={styles.chartCard}>
+        {!hidden("dailyAttendance") && <article className={styles.chartCard}>
           <div className={styles.chartHeader}>
             <div>
               <h3 className={styles.chartTitle}>Daily Attendance</h3>
-              <p className={styles.chartSubtitle}>Present vs Absent (last 5 days)</p>
+              <p className={styles.chartSubtitle}>Present vs Absent (last 7 days)</p>
             </div>
           </div>
           <div className={styles.legend}>
@@ -271,10 +561,10 @@ export default function HomeDashboard({
             </span>
           </div>
           <div className={styles.chartBars}>
-            {dailyAttendance.map((day) => {
+            {dailyAttendance.map((day, index) => {
               const total = day.present + day.absent;
               return (
-                <div key={day.day} className={styles.chartBarGroup}>
+                <div key={index} className={styles.chartBarGroup}>
                   <div className={styles.chartStack}>
                     <span
                       className={styles.chartBarPrimary}
@@ -291,9 +581,9 @@ export default function HomeDashboard({
               );
             })}
           </div>
-        </article>
+        </article>}
 
-        <article className={styles.chartCard}>
+        {!hidden("studentsByClass") && <article className={styles.chartCard}>
           <div className={styles.chartHeader}>
             <div>
               <h3 className={styles.chartTitle}>Students by Class</h3>
@@ -389,9 +679,97 @@ export default function HomeDashboard({
               </div>
             </div>
           )}
-        </article>
+        </article>}
+
+        {/* Class-wise Attendance Today */}
+        {!hidden("classAttendanceToday") && <article className={styles.chartCard}>
+          <div className={styles.chartHeader}>
+            <div>
+              <h3 className={styles.chartTitle}>Class Attendance Today</h3>
+              <p className={styles.chartSubtitle}>Present rate per class</p>
+            </div>
+          </div>
+          {classAttendance.length === 0 ? (
+            <div className={styles.empty}>No attendance data yet.</div>
+          ) : (
+            <div className={styles.classAttendanceList}>
+              {classAttendance.map((item) => {
+                const total = Number(item.present ?? 0) + Number(item.absent ?? 0);
+                const rate = total === 0 ? null : Math.round((Number(item.present) / total) * 100);
+                const isLow = rate !== null && rate < 75;
+                return (
+                  <div key={item.classCode} className={styles.classAttendanceRow}>
+                    <span className={styles.classAttendanceCode}>Class {item.classCode}</span>
+                    <div className={styles.classAttendanceBar}>
+                      <span
+                        className={styles.classAttendanceFill}
+                        style={{ width: `${rate ?? 0}%`, background: isLow ? "#dc2626" : "#16a34a" }}
+                      />
+                    </div>
+                    <span className={`${styles.classAttendanceRate} ${isLow ? styles.classAttendanceLow : ""}`}>
+                      {rate === null ? "—" : `${rate}%`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </article>}
 
       </section>
+
+      {/* Today's Absentee List */}
+      {!hidden("todayAbsentees") && <section className={styles.chartGrid}>
+        <article className={styles.chartCard}>
+          <div className={styles.chartHeader}>
+            <div>
+              <h3 className={styles.chartTitle}>Today&apos;s Absentees</h3>
+              <p className={styles.chartSubtitle}>Students marked absent today</p>
+            </div>
+            {absentStudents.length > 0 && (
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitAbsent}`}>
+                {absentStudents.length} absent
+              </span>
+            )}
+          </div>
+          {isAbsenteesLoading ? (
+            <div className={styles.absenteeList}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className={styles.skeletonLine} />
+              ))}
+            </div>
+          ) : absentStudents.length === 0 ? (
+            <div className={styles.empty}>No absences recorded today.</div>
+          ) : (
+            <ul className={styles.absenteeList}>
+              {absentStudents.slice(0, 5).map((student) => (
+                <li key={student.id} className={styles.absenteeItem}>
+                  <span className={styles.absenteeInfo}>
+                    <span className={styles.absenteeName}>{student.name}</span>
+                    <span className={styles.absenteeMeta}>
+                      Class {student.classCode} · Roll {student.rollNumber || "—"}
+                    </span>
+                  </span>
+                  {onStudentClick ? (
+                    <button
+                      type="button"
+                      className={styles.absenteeViewBtn}
+                      onClick={() => onStudentClick(student)}
+                    >
+                      View
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+              {absentStudents.length > 5 && (
+                <li className={styles.absenteeMore}>
+                  +{absentStudents.length - 5} more absent
+                </li>
+              )}
+            </ul>
+          )}
+        </article>
+      </section>}
     </div>
   );
 }

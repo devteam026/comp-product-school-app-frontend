@@ -1531,6 +1531,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
 }
 
 .chartCard {
@@ -1541,6 +1542,7 @@
   border-top: 3px solid #475569;
   display: grid;
   gap: 14px;
+  overflow: hidden;
   box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
   transition: box-shadow 180ms ease;
 }
@@ -1574,6 +1576,8 @@
   align-items: end;
   min-height: 160px;
   padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .chartBarGroup {
@@ -1770,6 +1774,262 @@
     justify-items: center;
   }
 }
+
+.classAttendanceList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.classAttendanceRow {
+  display: grid;
+  grid-template-columns: 80px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.classAttendanceCode {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.classAttendanceBar {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.classAttendanceFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 600ms ease;
+}
+
+.classAttendanceRate {
+  font-size: 12px;
+  font-weight: 700;
+  color: #16a34a;
+  text-align: right;
+}
+
+.classAttendanceLow {
+  color: #dc2626;
+}
+
+.absenteeList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.absenteeItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+}
+
+.absenteeInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.absenteeName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.absenteeMeta {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.absenteeViewBtn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.absenteeViewBtn:hover {
+  background: #fecaca;
+}
+
+.absenteeMore {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 6px 0 2px;
+  list-style: none;
+}
+
+/* ── Dashboard toolbar & customize panel ─────────────────────────── */
+
+.dashboardToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0 12px 0;
+}
+
+.customizeWrap {
+  position: relative;
+}
+
+.customizeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.customizeBtn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.customizePanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  width: 260px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+  overflow: hidden;
+}
+
+.customizePanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.customizeClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.customizeClose:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.customizeList {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.customizeItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  gap: 12px;
+  transition: background 100ms ease;
+}
+
+.customizeItem:hover {
+  background: #f8fafc;
+}
+
+.customizeLabel {
+  font-size: 13px;
+  color: #334155;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggleSwitch {
+  flex-shrink: 0;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #cbd5e1;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 200ms ease;
+  padding: 0;
+}
+
+.toggleSwitch.toggleOn {
+  background: #16a34a;
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 200ms ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.toggleSwitch.toggleOn .toggleThumb {
+  transform: translateX(16px);
+}
+
+/* ── end customize panel ──────────────────────────────────────────── */
 
 .menuToggle {
   display: none;

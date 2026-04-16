@@ -426,6 +426,7 @@ export default function HomeShell({
                 role={role}
                 dashboardData={dashboardData}
                 isLoading={isDashboardLoading}
+                onStudentClick={(student) => setSelectedProfile(student)}
               />
             ) : activeItem === "Student Management" ? (
               <StudentManagement
