@@ -18,6 +18,7 @@ export default function StudentProfileModal({
   const [photoLoading, setPhotoLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
   const historyEntries =
     student.historyEntries && student.historyEntries.length > 0
       ? student.historyEntries
@@ -38,18 +39,13 @@ export default function StudentProfileModal({
     });
     if (response.ok) {
       const data = await response.json().catch(() => null);
-      if (data?.url) {
-        setPhotoUrl(data.url);
-      } else {
-        setPhotoUrl("");
-      }
+      setPhotoUrl(data?.url || "");
     }
     setPhotoLoading(false);
   };
 
   useEffect(() => {
     loadPhoto();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student.id]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,31 +56,21 @@ export default function StudentProfileModal({
     try {
       const token = window.localStorage.getItem("authToken");
       const uploadRequest = await fetch(
-        apiUrl(
-          `/api/students/${student.id}/photo-upload?contentType=${encodeURIComponent(
-            file.type
-          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
-        ),
+        apiUrl(`/api/students/${student.id}/photo-upload`),
         {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         }
       );
-      if (!uploadRequest.ok) {
-        const err = await uploadRequest.json().catch(() => ({}));
-        throw new Error(err?.error ?? "Unable to start upload");
-      }
       const { uploadUrl, objectKey } = await uploadRequest.json();
-      const uploadResponse = await fetch(uploadUrl, {
+
+      await fetch(uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
       });
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
-      }
 
-      const updateResponse = await fetch(apiUrl(`/api/students/${student.id}`), {
+      await fetch(apiUrl(`/api/students/${student.id}`), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -95,13 +81,10 @@ export default function StudentProfileModal({
           profilePhotoKey: objectKey,
         }),
       });
-      if (!updateResponse.ok) {
-        throw new Error("Failed to save photo reference");
-      }
+
       await loadPhoto();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed";
-      setUploadError(message);
+      setUploadError("Upload failed");
     } finally {
       setIsUploading(false);
       event.target.value = "";
@@ -118,130 +101,135 @@ export default function StudentProfileModal({
               {student.name} · Class {student.classCode}
             </p>
           </div>
-          <button className={styles.inlineButton} type="button" onClick={onClose}>
+          <button className={styles.inlineButton} onClick={onClose}>
             Close
           </button>
         </div>
+
         <div className={styles.modalBody}>
+          {/* PHOTO */}
           <div className={styles.profileSection}>
             <div className={styles.sectionTitle}>Profile Photo</div>
             <div className={styles.photoCard}>
               <div className={styles.photoFrame}>
                 {photoUrl ? (
-                  <img
-                    className={styles.profilePhoto}
-                    src={photoUrl}
-                    alt={`${student.name} profile`}
-                  />
+                  <img className={styles.profilePhoto} src={photoUrl} />
                 ) : photoLoading ? (
                   <div className={styles.photoSkeleton} />
                 ) : (
-                  <div className={styles.profilePhotoPlaceholder}>No photo</div>
+                  <div>No photo</div>
                 )}
               </div>
-              <div className={styles.photoActions}>
-                <label className={styles.uploadButton}>
-                  {isUploading ? "Uploading..." : "Upload Photo"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    disabled={isUploading}
-                    hidden
-                  />
-                </label>
-                {uploadError ? (
-                  <div className={styles.error}>{uploadError}</div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className={styles.profileSection}>
-            <div className={styles.sectionTitle}>Student Details</div>
-            <div className={styles.profileGrid}>
-              <div className={styles.profileField}>
-                <span>Name</span>
-                <div className={styles.profileValue}>{student.name}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Class</span>
-                <div className={styles.profileValue}>{student.classCode}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Gender</span>
-                <div className={styles.profileValue}>{student.gender}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Date of Birth</span>
-                <div className={styles.profileValue}>{student.dateOfBirth || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Admission #</span>
-                <div className={styles.profileValue}>{student.admissionNumber || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Register #</span>
-                <div className={styles.profileValue}>{student.registerNo || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Roll #</span>
-                <div className={styles.profileValue}>{student.rollNumber || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Status</span>
-                <div className={styles.profileValue}>{student.status}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Address</span>
-                <div className={styles.profileValue}>{student.address || "-"}</div>
-              </div>
+              <label className={styles.uploadButton}>
+                {isUploading ? "Uploading..." : "Upload"}
+                <input type="file" hidden onChange={handleFileChange} />
+              </label>
+              {uploadError && <div className={styles.error}>{uploadError}</div>}
             </div>
           </div>
 
+          {/* BASIC */}
           <div className={styles.profileSection}>
-            <div className={styles.sectionTitle}>Parent/Guardian</div>
+            <div className={styles.sectionTitle}>Basic Details</div>
             <div className={styles.profileGrid}>
-              <div className={styles.profileField}>
-                <span>Name</span>
-                <div className={styles.profileValue}>{student.parentName || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Relation</span>
-                <div className={styles.profileValue}>{student.parentRelation || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Phone</span>
-                <div className={styles.profileValue}>{student.parentPhone || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Email</span>
-                <div className={styles.profileValue}>{student.parentEmail || "-"}</div>
-              </div>
-              <div className={styles.profileField}>
-                <span>Occupation</span>
-                <div className={styles.profileValue}>{student.parentOccupation || "-"}</div>
-              </div>
+              <Field label="Name" value={student.name} />
+              <Field label="Class" value={student.classCode} />
+              <Field label="Gender" value={student.gender} />
+              <Field label="DOB" value={student.dateOfBirth} />
+              <Field label="Admission #" value={student.admissionNumber} />
+              <Field label="Register #" value={student.registerNo} />
+              <Field label="Roll #" value={student.rollNumber} />
+              <Field label="Status" value={student.status} />
+              <Field label="Session" value={student.session} />
+              <Field label="Address" value={student.address} />
             </div>
           </div>
 
+          {/* PARENTS */}
+          <div className={styles.profileSection}>
+            <div className={styles.sectionTitle}>Parent / Guardian</div>
+            <div className={styles.profileGrid}>
+              <Field label="Father" value={student.fatherName} />
+              <Field label="Mother" value={student.motherName} />
+              <Field label="Guardian" value={student.parentName} />
+              <Field label="Relation" value={student.parentRelation} />
+              <Field label="Phone" value={student.parentPhone} />
+              <Field label="WhatsApp" value={student.parentWhatsapp} />
+              <Field label="Email" value={student.parentEmail} />
+              <Field label="Occupation" value={student.parentOccupation} />
+            </div>
+          </div>
+
+          {/* TRANSPORT */}
+          <div className={styles.profileSection}>
+            <div className={styles.sectionTitle}>Transport</div>
+            <div className={styles.profileGrid}>
+              <Field
+                label="Required"
+                value={student.transportRequired ? "Yes" : "No"}
+              />
+              {student.transportRequired && (
+                <>
+                  <Field label="Route" value={student.transportRoute} />
+                  <Field label="Vehicle" value={student.transportVehicleNo} />
+                  <Field label="Stop" value={student.transportStopName} />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* HOSTEL */}
+          <div className={styles.profileSection}>
+            <div className={styles.sectionTitle}>Hostel</div>
+            <div className={styles.profileGrid}>
+              <Field
+                label="Required"
+                value={student.hostelRequired ? "Yes" : "No"}
+              />
+              {student.hostelRequired && (
+                <>
+                  <Field label="Hostel" value={student.hostelName} />
+                  <Field label="Room" value={student.hostelRoomNo} />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* PREVIOUS SCHOOL */}
+          <div className={styles.profileSection}>
+            <div className={styles.sectionTitle}>Previous School</div>
+            <div className={styles.profileGrid}>
+              <Field label="School" value={student.previousSchoolName} />
+              <Field label="Qualification" value={student.previousQualification} />
+            </div>
+          </div>
+
+          {/* HISTORY */}
           <div className={styles.profileSection}>
             <div className={styles.sectionTitle}>History</div>
             <ul className={styles.historyList}>
-              {historyEntries.map((item, index) => {
-                const timestamp = formatTimestamp(item.createdAt);
-                return (
-                  <li key={`${item.entry}-${index}`} className={styles.historyItem}>
-                    <span>{item.entry}</span>
-                    {timestamp ? (
-                      <span className={styles.historyMeta}>{timestamp}</span>
-                    ) : null}
-                  </li>
-                );
-              })}
+              {historyEntries.map((item, index) => (
+                <li key={index}>
+                  {item.entry}{" "}
+                  {formatTimestamp(item.createdAt) && (
+                    <span>({formatTimestamp(item.createdAt)})</span>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Reusable field */
+function Field({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className={styles.profileField}>
+      <span>{label}</span>
+      <div className={styles.profileValue}>{value || "-"}</div>
     </div>
   );
 }
