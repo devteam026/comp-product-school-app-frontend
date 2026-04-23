@@ -853,6 +853,57 @@
   cursor: pointer;
 }
 
+.inlineButtonView {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+}
+
+.inlineButtonView:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.actionCell {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.detailRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.detailLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detailValue {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 500;
+  word-break: break-word;
+}
+
 .inlineActions {
   display: flex;
   align-items: flex-end;
@@ -1422,6 +1473,14 @@
   transform: translateY(-2px);
 }
 
+.cardClickable {
+  cursor: pointer;
+}
+
+.cardClickable:active {
+  transform: translateY(0px) scale(0.99);
+}
+
 .metricCardHeader {
   display: flex;
   align-items: flex-start;
@@ -1549,6 +1608,10 @@
 
 .chartCard:hover {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.09);
+}
+
+.chartCard.cardClickable:active {
+  transform: scale(0.99);
 }
 
 .chartHeader {
@@ -1974,6 +2037,34 @@
   background: #f1f5f9;
   border-color: #cbd5e1;
   color: #1e293b;
+}
+
+@media (max-width: 540px) {
+  .greetingBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .greetingActions {
+    width: 100%;
+    flex-shrink: 1;
+  }
+
+  .markAttendanceBtn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .customizeWrap {
+    flex: 1;
+  }
+
+  .customizeBtn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .customizePanel {

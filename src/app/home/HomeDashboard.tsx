@@ -327,7 +327,7 @@ export default function HomeDashboard({
 
       <section className={styles.metricGrid}>
         {/* Total Students */}
-        {!hidden("totalStudents") && <article className={styles.metricCard}>
+        {!hidden("totalStudents") && <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Student Management")}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>Total Students</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -357,7 +357,7 @@ export default function HomeDashboard({
         </article>}
 
         {/* Today's Attendance */}
-        {!hidden("todayAttendance") && <article className={styles.metricCard}>
+        {!hidden("todayAttendance") && <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Attendance Management")}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>Today&apos;s Attendance</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -392,7 +392,7 @@ export default function HomeDashboard({
 
         {/* Lowest Attendance (admin only) */}
         {role === "admin" && !hidden("lowestAttendance") ? (
-          <article className={styles.metricCard}>
+          <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Attendance Management")}>
             <div className={styles.metricCardHeader}>
               <h2 className={styles.metricTitle}>Lowest Attendance %</h2>
               <div className={styles.metricIconBadge} aria-hidden="true">
@@ -421,7 +421,7 @@ export default function HomeDashboard({
 
         {/* Fee Stats (admin / accountant) */}
         {canSeeFees && !hidden("feesThisMonth") ? (
-          <article className={styles.metricCard}>
+          <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Fee Management")}>
             <div className={styles.metricCardHeader}>
               <h2 className={styles.metricTitle}>Fees This Month</h2>
               <div className={styles.metricIconBadge} aria-hidden="true">
@@ -446,7 +446,7 @@ export default function HomeDashboard({
         ) : null}
 
         {/* Transport Utilization */}
-        {!hidden("transport") && <article className={styles.metricCard}>
+        {!hidden("transport") && <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Transport Management")}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>Transport</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -476,7 +476,7 @@ export default function HomeDashboard({
         </article>}
 
         {/* Hostel Occupancy */}
-        {!hidden("hostel") && <article className={styles.metricCard}>
+        {!hidden("hostel") && <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Hostel Management")}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>Hostel</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -504,7 +504,7 @@ export default function HomeDashboard({
         </article>}
 
         {/* New Admissions This Month */}
-        {!hidden("newAdmissions") && <article className={styles.metricCard}>
+        {!hidden("newAdmissions") && <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Student Management")}>
           <div className={styles.metricCardHeader}>
             <h2 className={styles.metricTitle}>New Admissions</h2>
             <div className={styles.metricIconBadge} aria-hidden="true">
@@ -524,7 +524,7 @@ export default function HomeDashboard({
 
         {/* Pending Leave Requests (admin only) */}
         {role === "admin" && !hidden("leaveRequests") ? (
-          <article className={styles.metricCard}>
+          <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Leave Management")}>
             <div className={styles.metricCardHeader}>
               <h2 className={styles.metricTitle}>Leave Requests</h2>
               <div className={styles.metricIconBadge} aria-hidden="true">
@@ -549,7 +549,7 @@ export default function HomeDashboard({
 
         {/* Fee Collection Rate (admin/accountant) */}
         {canSeeFees && !hidden("collectionRate") ? (
-          <article className={styles.metricCard}>
+          <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Fee Management")}>
             <div className={styles.metricCardHeader}>
               <h2 className={styles.metricTitle}>Collection Rate</h2>
               <div className={styles.metricIconBadge} aria-hidden="true">
@@ -579,7 +579,7 @@ export default function HomeDashboard({
       </section>
 
       <section className={styles.chartGrid}>
-        {!hidden("dailyAttendance") && <article className={styles.chartCard}>
+        {!hidden("dailyAttendance") && <article className={`${styles.chartCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Attendance Management")}>
           <div className={styles.chartHeader}>
             <div>
               <h3 className={styles.chartTitle}>Daily Attendance</h3>
@@ -619,7 +619,7 @@ export default function HomeDashboard({
           </div>
         </article>}
 
-        {!hidden("studentsByClass") && <article className={styles.chartCard}>
+        {!hidden("studentsByClass") && <article className={`${styles.chartCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Student Management")}>
           <div className={styles.chartHeader}>
             <div>
               <h3 className={styles.chartTitle}>Students by Class</h3>
@@ -718,7 +718,7 @@ export default function HomeDashboard({
         </article>}
 
         {/* Class-wise Attendance Today */}
-        {!hidden("classAttendanceToday") && <article className={styles.chartCard}>
+        {!hidden("classAttendanceToday") && <article className={`${styles.chartCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Attendance Management")}>
           <div className={styles.chartHeader}>
             <div>
               <h3 className={styles.chartTitle}>Class Attendance Today</h3>
