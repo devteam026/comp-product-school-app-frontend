@@ -71,10 +71,12 @@ export default function HomeShell({
       items = items.filter(
         (item) =>
           item !== "Employee Management" &&
-          item !== "Timetable Management" &&
           item !== "Transport Management" &&
           item !== "Hostel Management"
       );
+    }
+    if (role !== "admin" && role !== "teacher") {
+      items = items.filter((item) => item !== "Timetable Management");
     }
     return items;
   }, [role]);
@@ -445,6 +447,7 @@ export default function HomeShell({
               <TimetableManagement
                 activeClassCode={activeClass}
                 onSelectClass={(classCode) => setActiveClass(classCode)}
+                role={role}
               />
             ) : activeItem === "Transport Management" ? (
               <TransportManagement />

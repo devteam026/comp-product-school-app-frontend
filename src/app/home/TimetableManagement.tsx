@@ -10,6 +10,8 @@ type Period = {
   periodNo: number;
   startTime: string;
   endTime: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 type Assignment = {
@@ -32,12 +34,15 @@ const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
 type TimetableManagementProps = {
   activeClassCode?: string;
   onSelectClass?: (classCode: string) => void;
+  role?: string;
 };
 
 export default function TimetableManagement({
   activeClassCode,
   onSelectClass,
+  role,
 }: TimetableManagementProps) {
+  const isAdmin = role === "admin" || !role;
   const [activeTab, setActiveTab] = useState<
     "Timetable" | "Manage Period" | "Add Class"
   >("Timetable");
@@ -65,6 +70,8 @@ export default function TimetableManagement({
   const [periodNo, setPeriodNo] = useState(1);
   const [periodStart, setPeriodStart] = useState("09:00");
   const [periodEnd, setPeriodEnd] = useState("09:45");
+  const [periodStartDate, setPeriodStartDate] = useState("");
+  const [periodEndDate, setPeriodEndDate] = useState("");
   const [editingPeriodId, setEditingPeriodId] = useState<number | null>(null);
   const [isPeriodSaving, setIsPeriodSaving] = useState(false);
   const [classCode, setClassCode] = useState("");
@@ -160,9 +167,19 @@ export default function TimetableManagement({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, setupClassId]);
 
+  const activePeriods = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return periods.filter((p) => {
+      if (!p.startDate && !p.endDate) return true;
+      if (p.startDate && today < p.startDate) return false;
+      if (p.endDate && today > p.endDate) return false;
+      return true;
+    });
+  }, [periods]);
+
   const periodsByNo = useMemo(() => {
     const map = new Map<number, Period[]>();
-    periods.forEach((period) => {
+    activePeriods.forEach((period) => {
       const list = map.get(period.periodNo) ?? [];
       list.push(period);
       map.set(period.periodNo, list);
@@ -173,15 +190,15 @@ export default function TimetableManagement({
         periodNo,
         items,
       }));
-  }, [periods]);
+  }, [activePeriods]);
 
   const periodMap = useMemo(() => {
     const map = new Map<string, Period>();
-    periods.forEach((period) => {
+    activePeriods.forEach((period) => {
       map.set(`${period.dayOfWeek}-${period.periodNo}`, period);
     });
     return map;
-  }, [periods]);
+  }, [activePeriods]);
 
   const assignmentMap = useMemo(() => {
     const map = new Map<string, Assignment>();
@@ -253,12 +270,22 @@ export default function TimetableManagement({
       return;
     }
     const classId = Number(filterClassId);
+    const incomplete: string[] = [];
     const updates = Object.entries(pending)
       .map(([key, value]) => {
         const [periodIdValue] = key.split("-").map((v) => Number(v));
-        const teacherId = value.teacherId;
-        const subjectId = value.subjectId;
-        if (!teacherId || !subjectId || !periodIdValue) return null;
+        const existing = assignmentMap.get(`${periodIdValue}-${classId}`);
+        const teacherId = value.teacherId ?? existing?.teacherId;
+        const subjectId = value.subjectId ?? existing?.subjectId;
+        if (!periodIdValue) return null;
+        if (!teacherId || !subjectId) {
+          const period = periods.find((p) => p.id === periodIdValue);
+          const label = period ? `Period ${period.periodNo} (${period.dayOfWeek})` : `Period`;
+          if (!teacherId && !subjectId) incomplete.push(`${label}: select teacher and subject`);
+          else if (!teacherId) incomplete.push(`${label}: select a teacher`);
+          else incomplete.push(`${label}: select a subject`);
+          return null;
+        }
         return {
           teacherId,
           classId,
@@ -274,9 +301,16 @@ export default function TimetableManagement({
       periodId: number;
       weekKey: string;
     }>;
+    if (incomplete.length > 0 && updates.length === 0) {
+      setMessage(incomplete.join("; "));
+      return;
+    }
     if (updates.length === 0) {
       setMessage("No changes to save.");
       return;
+    }
+    if (incomplete.length > 0) {
+      setMessage(`Saving ${updates.length} complete assignment(s). Skipped: ${incomplete.join("; ")}`);
     }
     setIsSaving(true);
     const token = window.localStorage.getItem("authToken");
@@ -378,7 +412,7 @@ export default function TimetableManagement({
     <div className={styles.form}>
       <div className={styles.sectionTitle}>Timetable Management</div>
       <div className={styles.tabs}>
-        {["Timetable", "Manage Period", "Add Class"].map((tab) => (
+        {(isAdmin ? ["Timetable", "Manage Period", "Add Class"] : ["Timetable"]).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -391,7 +425,7 @@ export default function TimetableManagement({
           </button>
         ))}
       </div>
-      {activeTab === "Timetable" ? (
+      {activeTab === "Timetable" && isAdmin ? (
         <div className={styles.fieldGrid}>
           <label className={styles.label}>
             Week Key
@@ -548,6 +582,7 @@ export default function TimetableManagement({
                           className={styles.inlineButton}
                           type="button"
                           onClick={async () => {
+                            if (!window.confirm(`Are you sure you want to delete class "${c.classCode} - ${c.name}"? This may remove related timetable data.`)) return;
                             const token = window.localStorage.getItem("authToken");
                             const response = await fetch(
                               apiUrl(`/api/classes/manage/${c.id}`),
@@ -694,6 +729,7 @@ export default function TimetableManagement({
                           className={styles.inlineButton}
                           type="button"
                           onClick={async () => {
+                            if (!window.confirm(`Are you sure you want to delete subject "${subject.name}"?`)) return;
                             const token = window.localStorage.getItem("authToken");
                             const response = await fetch(
                               apiUrl(`/api/timetable/subjects/${subject.id}`),
@@ -785,6 +821,24 @@ export default function TimetableManagement({
                 onChange={(e) => setPeriodEnd(e.target.value)}
               />
             </label>
+            <label className={styles.label}>
+              Start Date
+              <input
+                className={styles.input}
+                type="date"
+                value={periodStartDate}
+                onChange={(e) => setPeriodStartDate(e.target.value)}
+              />
+            </label>
+            <label className={styles.label}>
+              End Date
+              <input
+                className={styles.input}
+                type="date"
+                value={periodEndDate}
+                onChange={(e) => setPeriodEndDate(e.target.value)}
+              />
+            </label>
           </div>
           <div className={styles.formActions}>
             <button
@@ -815,11 +869,15 @@ export default function TimetableManagement({
                       periodNo,
                       startTime: periodStart,
                       endTime: periodEnd,
+                      startDate: periodStartDate || null,
+                      endDate: periodEndDate || null,
                     }),
                   }
                 );
                 if (response.ok) {
                   setEditingPeriodId(null);
+                  setPeriodStartDate("");
+                  setPeriodEndDate("");
                   setMessage("Period saved.");
                   loadClassSetup(setupClassId);
                 } else {
@@ -844,6 +902,8 @@ export default function TimetableManagement({
                   <th>Day</th>
                   <th>Period</th>
                   <th>Time</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -856,6 +916,8 @@ export default function TimetableManagement({
                     <td>
                       {period.startTime} - {period.endTime}
                     </td>
+                    <td>{period.startDate ?? "-"}</td>
+                    <td>{period.endDate ?? "-"}</td>
                     <td>
                       <button
                         className={styles.inlineButton}
@@ -866,6 +928,8 @@ export default function TimetableManagement({
                           setPeriodNo(period.periodNo);
                           setPeriodStart(period.startTime);
                           setPeriodEnd(period.endTime);
+                          setPeriodStartDate(period.startDate ?? "");
+                          setPeriodEndDate(period.endDate ?? "");
                         }}
                       >
                         Edit
@@ -935,14 +999,16 @@ export default function TimetableManagement({
       ) : (
         <div className={styles.timetableWrapper}>
                   <div className={styles.formActions}>
-                    <button
-                      className={styles.button}
-                      type="button"
-                      onClick={() => setIsEditMode(true)}
-                      disabled={isEditMode}
-                    >
-                      Edit Timetable
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        className={styles.button}
+                        type="button"
+                        onClick={() => setIsEditMode(true)}
+                        disabled={isEditMode}
+                      >
+                        Edit Timetable
+                      </button>
+                    ) : null}
                     <button
                       className={styles.inlineButton}
                       type="button"
@@ -950,14 +1016,16 @@ export default function TimetableManagement({
                     >
                       Download PDF
                     </button>
-                    <button
-                      className={styles.button}
-                      type="button"
-                      onClick={handleSaveAll}
-                      disabled={!isEditMode || isSaving}
-                    >
-                      {isSaving ? "Saving..." : "Save Changes"}
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        className={styles.button}
+                        type="button"
+                        onClick={handleSaveAll}
+                        disabled={!isEditMode || isSaving}
+                      >
+                        {isSaving ? "Saving..." : "Save Changes"}
+                      </button>
+                    ) : null}
                   </div>
                   <div className={styles.timetableGrid}>
                     <div className={styles.timetableHeader}>Period</div>
@@ -974,9 +1042,16 @@ export default function TimetableManagement({
                           <div className={styles.timetablePeriod}>
                             <div>Period {row.periodNo}</div>
                             {sample ? (
-                              <small>
-                                {sample.startTime} - {sample.endTime}
-                              </small>
+                              <>
+                                <small>
+                                  {sample.startTime} - {sample.endTime}
+                                </small>
+                                {sample.startDate || sample.endDate ? (
+                                  <small style={{ opacity: 0.7 }}>
+                                    {sample.startDate ?? ""} {sample.startDate && sample.endDate ? "to" : ""} {sample.endDate ?? ""}
+                                  </small>
+                                ) : null}
+                              </>
                             ) : null}
                           </div>
                           {days.map((day) => {

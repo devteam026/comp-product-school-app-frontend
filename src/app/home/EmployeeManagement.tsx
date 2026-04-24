@@ -57,6 +57,8 @@ type Employee = {
   idProofKey?: string;
   resumeKey?: string;
   teacherDetails?: TeacherDetails;
+  loginRole?: string;
+  loginActive?: boolean;
 };
 
 type EmployeeManagementProps = {
@@ -203,9 +205,8 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     return () => window.clearTimeout(timer);
   }, [classMessage]);
 
-  useEffect(() => {
+  const openClassModal = () => {
     if (roleValue !== "teacher" || !roleEmployeeId) return;
-    let isActive = true;
     setShowClassModal(true);
     setIsClassLoading(true);
     const token = window.localStorage.getItem("authToken");
@@ -214,19 +215,13 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: string[]) => {
-        if (!isActive) return;
         setClassOptions(Array.isArray(data) ? data : []);
       })
       .finally(() => {
-        if (isActive) {
-          setClassSelection([]);
-          setIsClassLoading(false);
-        }
+        setClassSelection([]);
+        setIsClassLoading(false);
       });
-    return () => {
-      isActive = false;
-    };
-  }, [roleValue, roleEmployeeId]);
+  };
   const handleChange = (key: keyof Employee, value: string | number | boolean) => {
     setForm((prev) => ({
       ...prev,
@@ -1276,7 +1271,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </select>
             </label>
             <label className={styles.label}>
-              Employee (Username = Employee ID)
+              Employee (Username = 4-digit Employee ID, e.g. 0001)
               <select
                 className={styles.input}
                 value={roleEmployeeId}
@@ -1389,6 +1384,16 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   setRolePassword("");
                   setRolePasswordConfirm("");
                   setRoleMessage("Login role assigned successfully.");
+                  setEmployees((prev) =>
+                    prev.map((e) =>
+                      e.id === Number(roleEmployeeId)
+                        ? { ...e, loginRole: roleValue, loginActive: roleActive }
+                        : e
+                    )
+                  );
+                  if (roleValue === "teacher") {
+                    openClassModal();
+                  }
                 } else {
                   setRoleMessage("Failed to assign login role.");
                 }
@@ -1411,8 +1416,9 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     <th>Employee ID</th>
                     <th>Name</th>
                     <th>Department</th>
-                    <th>Role</th>
+                    <th>Login Role</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1423,8 +1429,72 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                         {employee.firstName} {employee.lastName}
                       </td>
                       <td>{employee.department || "-"}</td>
-                      <td>{employee.role || "-"}</td>
-                      <td>{employee.role ? "Active" : "-"}</td>
+                      <td>{employee.loginRole || "-"}</td>
+                      <td>{employee.loginActive === true ? "Active" : employee.loginActive === false ? "Inactive" : "-"}</td>
+                      <td>
+                        {employee.loginRole ? (
+                          <>
+                            <button
+                              className={styles.inlineButton}
+                              type="button"
+                              onClick={() => {
+                                setRoleEmployeeId(String(employee.id));
+                                setRoleValue(employee.loginRole ?? "");
+                                setRoleActive(employee.loginActive ?? true);
+                                setUpdatePassword(false);
+                                setRolePassword("");
+                                setRolePasswordConfirm("");
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className={styles.inlineButton}
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`Are you sure you want to delete login role for "${employee.firstName} ${employee.lastName}"?`)) return;
+                                const token = window.localStorage.getItem("authToken");
+                                const response = await fetch(
+                                  apiUrl(`/api/employees/${employee.id}/role`),
+                                  {
+                                    method: "DELETE",
+                                    headers: token
+                                      ? { Authorization: `Bearer ${token}` }
+                                      : undefined,
+                                  }
+                                );
+                                if (response.ok) {
+                                  setRoleMessage("Login role deleted.");
+                                  setEmployees((prev) =>
+                                    prev.map((e) =>
+                                      e.id === employee.id
+                                        ? { ...e, loginRole: undefined, loginActive: undefined }
+                                        : e
+                                    )
+                                  );
+                                } else {
+                                  setRoleMessage("Failed to delete login role.");
+                                }
+                              }}
+                            >
+                              Delete
+                            </button>
+                            {employee.loginRole === "teacher" ? (
+                              <button
+                                className={styles.inlineButton}
+                                type="button"
+                                onClick={() => {
+                                  setRoleEmployeeId(String(employee.id));
+                                  setRoleValue("teacher");
+                                  openClassModal();
+                                }}
+                              >
+                                Assign Classes
+                              </button>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
