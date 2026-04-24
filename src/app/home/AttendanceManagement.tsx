@@ -15,7 +15,7 @@ type Status = "Present" | "Absent";
 
 const sortFields = ["name", "classCode", "rollNumber", "status"] as const;
 const pageSizeOptions = [10, 25, 50] as const;
-const tabs = ["Take Attendance"] as const;
+const tabs = ["Take Attendance", "View Attendance"] as const;
 
 type SortField = (typeof sortFields)[number];
 
@@ -77,23 +77,13 @@ export default function AttendanceManagement({
     }));
   };
 
-  const presentCount = useMemo(() => {
-    return activeStudents.filter((student) => attendance[student.id] !== "Absent")
-      .length;
-  }, [activeStudents, attendance]);
-
-  const absentCount = useMemo(() => {
-    return activeStudents.filter((student) => attendance[student.id] === "Absent")
-      .length;
-  }, [activeStudents, attendance]);
-
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage(null);
 
     try {
       const token = window.localStorage.getItem("authToken");
-      const records = activeStudents.map((student) => ({
+      const records = filteredStudents.map((student) => ({
         studentId: student.id,
         status: attendance[student.id] ?? "Present",
       }));
@@ -173,6 +163,16 @@ export default function AttendanceManagement({
     });
   }, [activeStudents, attendance, search, filterClass, filterGender, filterStatus]);
 
+  const presentCount = useMemo(() => {
+    return filteredStudents.filter((student) => attendance[student.id] !== "Absent")
+      .length;
+  }, [filteredStudents, attendance]);
+
+  const absentCount = useMemo(() => {
+    return filteredStudents.filter((student) => attendance[student.id] === "Absent")
+      .length;
+  }, [filteredStudents, attendance]);
+
   const sortedStudents = useMemo(() => {
     const sorted = [...filteredStudents].sort((a, b) => {
       const aValue =
@@ -211,7 +211,80 @@ export default function AttendanceManagement({
         ))}
       </div>
 
-      {isLoading || isAttendanceLoading ? (
+      {activeTab === "View Attendance" ? (
+        <div>
+          <div className={styles.fieldGrid}>
+            <label className={styles.label}>
+              Date
+              <input
+                className={styles.input}
+                type="date"
+                value={attendanceDate}
+                onChange={(event) => setAttendanceDate(event.target.value)}
+              />
+            </label>
+          </div>
+          {isLoading || isAttendanceLoading ? (
+            <div className={styles.loadingCard}>
+              <div className={styles.skeletonTitle} />
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLine} />
+            </div>
+          ) : activeStudents.length === 0 ? (
+            <div className={styles.empty}>No students available.</div>
+          ) : (
+            <>
+              <div className={styles.fieldRow}>
+                <div>
+                  <strong>Present:</strong> {presentCount} &nbsp; <strong>Absent:</strong> {absentCount} &nbsp; <strong>Total:</strong> {filteredStudents.length}
+                </div>
+              </div>
+              <div className={styles.tableResponsive}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Student</th>
+                      <th>Class</th>
+                      <th>Roll #</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredStudents.map((student, index) => {
+                      const status: Status = attendance[student.id] ?? "Present";
+                      return (
+                        <tr key={student.id}>
+                          <td>{index + 1}</td>
+                          <td
+                            className={styles.rowClickable}
+                            onClick={() => setSelectedStudent(student)}
+                          >
+                            {student.name}
+                          </td>
+                          <td>{student.classCode}</td>
+                          <td>{student.rollNumber || "-"}</td>
+                          <td>
+                            <span
+                              className={
+                                status === "Present"
+                                  ? styles.statusPresent
+                                  : styles.statusAbsent
+                              }
+                            >
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      ) : isLoading || isAttendanceLoading ? (
         <div className={styles.loadingCard}>
           <div className={styles.skeletonTitle} />
           <div className={styles.skeletonLine} />
