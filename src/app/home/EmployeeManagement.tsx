@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import { apiUrl } from "../../lib/api";
+import { DESIGNATION_OPTIONS } from "./data";
 
 type TeacherDetails = {
   subjectsAssigned: string;
@@ -73,7 +74,7 @@ const emptyTeacherDetails = (): TeacherDetails => ({
 });
 
 const departmentOptions = ["Teaching", "Accounts", "Admin", "Transport","Hostel"] as const;
-const designationOptions = ["Teacher", "Accountant", "Clerk", "Driver","Warden","Caretaker","security","mess staff","Admin"] as const;
+const designationOptions = DESIGNATION_OPTIONS;
 const employmentTypeOptions = ["Full-time", "Part-time", "Contract"] as const;
 
 const sanitizeDigits = (value: string, maxLen: number) =>

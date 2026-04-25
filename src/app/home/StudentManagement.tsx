@@ -34,7 +34,7 @@ type SortField = (typeof sortFields)[number];
 
 type StudentManagementProps = {
   students: Student[];
-  onAddStudent: (student: Student) => Promise<{ ok: boolean; student?: Student | null }>;
+  onAddStudent: (student: Student) => Promise<{ ok: boolean; student?: Student | null; error?: string }>;
   role: string;
   username: string;
   classCode?: string;
@@ -585,7 +585,7 @@ export default function StudentManagement({
     }
 
     const newStudent: Student = {
-      id: crypto.randomUUID(),
+      id: (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`),
       name: trimmedName,
       grade: safeGrade,
       section: normalizedSection,
@@ -634,7 +634,7 @@ export default function StudentManagement({
       }
       showAddMessage(`Student "${trimmedName}" added successfully.`);
     } else {
-      showAddMessage("Failed to add student. Please try again.", "error");
+      showAddMessage(addResult.error ?? "Failed to add student. Please try again.", "error");
       return;
     }
     setName("");
@@ -801,7 +801,7 @@ export default function StudentManagement({
       );
       showEditMessage("Student updated successfully.", "success");
     } else {
-      showEditMessage("Unable to save changes. Please try again.", "error");
+      showEditMessage(saveResult.error ?? "Unable to save changes. Please try again.", "error");
     }
   };
 
@@ -860,7 +860,7 @@ export default function StudentManagement({
       const importClassCode =
         importSection === "N/A" ? importGrade : `${importGrade}${importSection}`;
       const newStudent: Student = {
-        id: crypto.randomUUID(),
+        id: (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`),
         name: record.name ?? "",
         grade: importGrade,
         section: importSection,
@@ -1212,8 +1212,9 @@ export default function StudentManagement({
           ) : null}
 
           <div className={styles.fieldRow}>
+          
             <label className={styles.label}>
-              Father Name 
+              Father Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
@@ -1224,13 +1225,13 @@ export default function StudentManagement({
             </label>
 
             <label className={styles.label}>
-              Mother Name 
+              Mother Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
                 value={motherName}
                 onChange={(event) => setMotherName(event.target.value)}
-                
+                required
               />
             </label>
 

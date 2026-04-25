@@ -12,6 +12,8 @@ type Period = {
   endTime: string;
   startDate?: string;
   endDate?: string;
+  classId?: number;
+  classCode?: string;
 };
 
 type Assignment = {
@@ -44,7 +46,7 @@ export default function TimetableManagement({
 }: TimetableManagementProps) {
   const isAdmin = role === "admin" || !role;
   const [activeTab, setActiveTab] = useState<
-    "Timetable" | "Manage Period" | "Add Class"
+    "Timetable" | "Manage Period"
   >("Timetable");
   const [weekKey, setWeekKey] = useState("default");
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -59,13 +61,10 @@ export default function TimetableManagement({
   const [isLoading, setIsLoading] = useState(false);
   const [pending, setPending] = useState<Record<string, { teacherId?: number; subjectId?: number }>>({});
   const [isEditMode, setIsEditMode] = useState(false);
-  const [classSetupSubjects, setClassSetupSubjects] = useState<Subject[]>([]);
   const [classSetupPeriods, setClassSetupPeriods] = useState<Period[]>([]);
   const [classSetupClasses, setClassSetupClasses] = useState<ClassManage[]>([]);
-  const [setupClassId, setSetupClassId] = useState("");
-  const [subjectName, setSubjectName] = useState("");
-  const [subjectColor, setSubjectColor] = useState("#64748b");
-  const [editingSubjectId, setEditingSubjectId] = useState<number | null>(null);
+  const [setupClassId, setSetupClassId] = useState(""); // form dropdown only
+  const [tablePeriodClassId, setTablePeriodClassId] = useState(""); // drives the table
   const [periodDay, setPeriodDay] = useState("MON");
   const [periodNo, setPeriodNo] = useState(1);
   const [periodStart, setPeriodStart] = useState("09:00");
@@ -74,10 +73,7 @@ export default function TimetableManagement({
   const [periodEndDate, setPeriodEndDate] = useState("");
   const [editingPeriodId, setEditingPeriodId] = useState<number | null>(null);
   const [isPeriodSaving, setIsPeriodSaving] = useState(false);
-  const [classCode, setClassCode] = useState("");
-  const [className, setClassName] = useState("");
-  const [classSection, setClassSection] = useState("");
-  const [editingClassId, setEditingClassId] = useState<number | null>(null);
+  const [isPeriodsLoading, setIsPeriodsLoading] = useState(false);
 
   const fetchTimetable = async () => {
     setIsLoading(true);
@@ -102,26 +98,16 @@ export default function TimetableManagement({
   };
 
   const loadClassSetup = async (classIdValue: string) => {
-    if (!classIdValue) {
-      setClassSetupSubjects([]);
-      setClassSetupPeriods([]);
-      return;
-    }
+    setIsPeriodsLoading(true);
     const token = window.localStorage.getItem("authToken");
-    const [subjectRes, periodRes] = await Promise.all([
-      fetch(apiUrl(`/api/timetable/subjects?classId=${classIdValue}`), {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      }),
-      fetch(apiUrl(`/api/timetable/periods?classId=${classIdValue}`), {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      }),
-    ]);
-    if (subjectRes.ok) {
-      setClassSetupSubjects(await subjectRes.json());
+    const classParam = classIdValue ? `?classId=${classIdValue}` : "";
+    const response = await fetch(apiUrl(`/api/timetable/periods${classParam}`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (response.ok) {
+      setClassSetupPeriods(await response.json());
     }
-    if (periodRes.ok) {
-      setClassSetupPeriods(await periodRes.json());
-    }
+    setIsPeriodsLoading(false);
   };
 
   const loadClassList = async () => {
@@ -144,11 +130,14 @@ export default function TimetableManagement({
     if (!activeClassCode || activeClassCode === "all") {
       setFilterClassId("");
       setSetupClassId("");
+      setTablePeriodClassId("");
       return;
     }
     const match = classes.find((c) => c.classCode === activeClassCode);
-    setFilterClassId(match ? String(match.id) : "");
-    setSetupClassId(match ? String(match.id) : "");
+    const id = match ? String(match.id) : "";
+    setFilterClassId(id);
+    setSetupClassId(id);
+    setTablePeriodClassId(id);
   }, [activeClassCode, classes]);
 
   useEffect(() => {
@@ -158,14 +147,12 @@ export default function TimetableManagement({
   }, [message]);
 
   useEffect(() => {
-    if ((activeTab === "Manage Period" || activeTab === "Add Class") && setupClassId) {
-      loadClassSetup(setupClassId);
-    }
-    if (activeTab === "Manage Period" || activeTab === "Add Class") {
+    if (activeTab === "Manage Period") {
+      loadClassSetup(tablePeriodClassId);
       loadClassList();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, setupClassId]);
+  }, [activeTab, tablePeriodClassId]);
 
   const activePeriods = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -355,7 +342,9 @@ export default function TimetableManagement({
             return `<td><div><strong>${teacher?.name ?? "-"}</strong></div><div>${subject?.name ?? ""}</div></td>`;
           })
           .join("");
-        return `<tr><th>Period ${row.periodNo}</th>${cells}</tr>`;
+        const sample = row.items[0];
+        const timeLabel = sample ? `<br><small style="font-weight:normal;color:#64748b">${sample.startTime} - ${sample.endTime}</small>` : "";
+        return `<tr><th>Period ${row.periodNo}${timeLabel}</th>${cells}</tr>`;
       })
       .join("");
 
@@ -412,13 +401,13 @@ export default function TimetableManagement({
     <div className={styles.form}>
       <div className={styles.sectionTitle}>Timetable Management</div>
       <div className={styles.tabs}>
-        {(isAdmin ? ["Timetable", "Manage Period", "Add Class"] : ["Timetable"]).map((tab) => (
+        {(isAdmin ? ["Timetable", "Manage Period"] : ["Timetable"]).map((tab) => (
           <button
             key={tab}
             type="button"
             className={`${styles.tab} ${tab === activeTab ? styles.tabActive : ""}`}
             onClick={() =>
-              setActiveTab(tab as "Timetable" | "Manage Period" | "Add Class")
+              setActiveTab(tab as "Timetable" | "Manage Period")
             }
           >
             {tab}
@@ -427,14 +416,6 @@ export default function TimetableManagement({
       </div>
       {activeTab === "Timetable" && isAdmin ? (
         <div className={styles.fieldGrid}>
-          <label className={styles.label}>
-            Week Key
-            <input
-              className={styles.input}
-              value={weekKey}
-              onChange={(e) => setWeekKey(e.target.value)}
-            />
-          </label>
           <label className={styles.label}>
             View by Teacher
             <select
@@ -470,295 +451,7 @@ export default function TimetableManagement({
 
       {message ? <div className={styles.success}>{message}</div> : null}
 
-      {activeTab === "Add Class" ? (
-        <div className={styles.listLayout}>
-          <div className={styles.profileSection}>
-            <div className={styles.sectionTitle}>Class Details</div>
-            <div className={styles.fieldGrid}>
-              <label className={styles.label}>
-                Class Code <span className={styles.requiredMark}>*</span>
-                <input
-                  className={styles.input}
-                  value={classCode}
-                  onChange={(e) => setClassCode(e.target.value)}
-                />
-              </label>
-              <label className={styles.label}>
-                Class Name <span className={styles.requiredMark}>*</span>
-                <input
-                  className={styles.input}
-                  value={className}
-                  onChange={(e) => setClassName(e.target.value)}
-                />
-              </label>
-              <label className={styles.label}>
-                Section
-                <input
-                  className={styles.input}
-                  value={classSection}
-                  onChange={(e) => setClassSection(e.target.value)}
-                />
-              </label>
-            </div>
-            <div className={styles.formActions}>
-              <button
-                className={styles.button}
-                type="button"
-                onClick={async () => {
-                  if (!classCode.trim() || !className.trim()) {
-                    setMessage("Class code and name are required.");
-                    return;
-                  }
-                  const token = window.localStorage.getItem("authToken");
-                  const response = await fetch(
-                    apiUrl(
-                      editingClassId
-                        ? `/api/classes/manage/${editingClassId}`
-                        : "/api/classes/manage"
-                    ),
-                    {
-                      method: editingClassId ? "PUT" : "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                      },
-                      body: JSON.stringify({
-                        classCode: classCode.trim(),
-                        name: className.trim(),
-                        section: classSection.trim() || null,
-                      }),
-                    }
-                  );
-                  if (response.ok) {
-                    setMessage(
-                      editingClassId ? "Class updated." : "Class saved."
-                    );
-                    setClassCode("");
-                    setClassName("");
-                    setClassSection("");
-                    setEditingClassId(null);
-                    loadClassList();
-                    fetchTimetable();
-                  } else {
-                    setMessage("Unable to save class.");
-                  }
-                }}
-              >
-                {editingClassId ? "Update Class" : "Save Class"}
-              </button>
-            </div>
-            <div className={styles.tableResponsive}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Class Code</th>
-                    <th>Name</th>
-                    <th>Section</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classSetupClasses.map((c, index) => (
-                    <tr key={c.id}>
-                      <td>{index + 1}</td>
-                      <td>{c.classCode}</td>
-                      <td>{c.name}</td>
-                      <td>{c.section ?? "-"}</td>
-                      <td>
-                        <button
-                          className={styles.inlineButton}
-                          type="button"
-                          onClick={() => {
-                            setEditingClassId(c.id);
-                            setClassCode(c.classCode);
-                            setClassName(c.name);
-                            setClassSection(c.section ?? "");
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className={styles.inlineButton}
-                          type="button"
-                          onClick={async () => {
-                            if (!window.confirm(`Are you sure you want to delete class "${c.classCode} - ${c.name}"? This may remove related timetable data.`)) return;
-                            const token = window.localStorage.getItem("authToken");
-                            const response = await fetch(
-                              apiUrl(`/api/classes/manage/${c.id}`),
-                              {
-                                method: "DELETE",
-                                headers: token
-                                  ? { Authorization: `Bearer ${token}` }
-                                  : undefined,
-                              }
-                            );
-                            if (response.ok) {
-                              setMessage("Class deleted.");
-                              loadClassList();
-                              fetchTimetable();
-                            } else {
-                              setMessage("Unable to delete class.");
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className={styles.profileSection}>
-            <div className={styles.sectionTitle}>Class Subjects</div>
-            <div className={styles.fieldGrid}>
-              <label className={styles.label}>
-                Class <span className={styles.requiredMark}>*</span>
-                <select
-                  className={styles.input}
-                  value={setupClassId}
-                  onChange={(e) => {
-                    setSetupClassId(e.target.value);
-                    loadClassSetup(e.target.value);
-                  }}
-                >
-                  <option value="">Select</option>
-                  {classSetupClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.classCode}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.label}>
-                Subject Name <span className={styles.requiredMark}>*</span>
-                <input
-                  className={styles.input}
-                  value={subjectName}
-                  onChange={(e) => setSubjectName(e.target.value)}
-                />
-              </label>
-              <label className={styles.label}>
-                Color
-                <input
-                  className={styles.input}
-                  type="color"
-                  value={subjectColor}
-                  onChange={(e) => setSubjectColor(e.target.value)}
-                />
-              </label>
-            </div>
-            <div className={styles.formActions}>
-              <button
-                className={styles.button}
-                type="button"
-                onClick={async () => {
-                  if (!setupClassId || !subjectName.trim()) {
-                    setMessage("Select class and subject name.");
-                    return;
-                  }
-                  const token = window.localStorage.getItem("authToken");
-                  const response = await fetch(
-                    apiUrl(
-                      editingSubjectId
-                        ? `/api/timetable/subjects/${editingSubjectId}`
-                        : "/api/timetable/subjects"
-                    ),
-                    {
-                      method: editingSubjectId ? "PUT" : "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                      },
-                      body: JSON.stringify({
-                        classId: Number(setupClassId),
-                        name: subjectName.trim(),
-                        color: subjectColor,
-                      }),
-                    }
-                  );
-                  if (response.ok) {
-                    setSubjectName("");
-                    setEditingSubjectId(null);
-                    setMessage("Subject saved.");
-                    loadClassSetup(setupClassId);
-                  } else {
-                    setMessage("Unable to save subject.");
-                  }
-                }}
-              >
-                {editingSubjectId ? "Update Subject" : "Save Subject"}
-              </button>
-            </div>
-            <div className={styles.tableResponsive}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Name</th>
-                    <th>Color</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classSetupSubjects.map((subject, index) => (
-                    <tr key={subject.id}>
-                      <td>{index + 1}</td>
-                      <td>{subject.name}</td>
-                      <td>
-                        <span
-                          className={styles.colorSwatch}
-                          style={{ background: subject.color ?? "#cbd5f5" }}
-                        />
-                      </td>
-                      <td>
-                        <button
-                          className={styles.inlineButton}
-                          type="button"
-                          onClick={() => {
-                            setEditingSubjectId(subject.id);
-                            setSubjectName(subject.name);
-                            setSubjectColor(subject.color ?? "#64748b");
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className={styles.inlineButton}
-                          type="button"
-                          onClick={async () => {
-                            if (!window.confirm(`Are you sure you want to delete subject "${subject.name}"?`)) return;
-                            const token = window.localStorage.getItem("authToken");
-                            const response = await fetch(
-                              apiUrl(`/api/timetable/subjects/${subject.id}`),
-                              {
-                                method: "DELETE",
-                                headers: token
-                                  ? { Authorization: `Bearer ${token}` }
-                                  : undefined,
-                              }
-                            );
-                            if (response.ok) {
-                              setMessage("Subject deleted.");
-                              loadClassSetup(setupClassId);
-                            } else {
-                              setMessage("Unable to delete subject.");
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      ) : activeTab === "Manage Period" ? (
+      {activeTab === "Manage Period" ? (
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Class Periods</div>
           <div className={styles.fieldGrid}>
@@ -767,12 +460,9 @@ export default function TimetableManagement({
               <select
                 className={styles.input}
                 value={setupClassId}
-                onChange={(e) => {
-                  setSetupClassId(e.target.value);
-                  loadClassSetup(e.target.value);
-                }}
+                onChange={(e) => setSetupClassId(e.target.value)}
               >
-                <option value="">Select</option>
+                <option value="">All</option>
                 {classSetupClasses.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.classCode}
@@ -799,6 +489,7 @@ export default function TimetableManagement({
               <input
                 className={styles.input}
                 type="number"
+                min={1}
                 value={periodNo}
                 onChange={(e) => setPeriodNo(Number(e.target.value))}
               />
@@ -849,6 +540,18 @@ export default function TimetableManagement({
                   setMessage("Select class first.");
                   return;
                 }
+                if (periodNo < 1) {
+                  setMessage("Period number must be 1 or greater.");
+                  return;
+                }
+                if (periodStart >= periodEnd) {
+                  setMessage("End time must be after start time.");
+                  return;
+                }
+                if (periodStartDate && periodEndDate && periodEndDate < periodStartDate) {
+                  setMessage("End date must be on or after start date.");
+                  return;
+                }
                 setIsPeriodSaving(true);
                 const token = window.localStorage.getItem("authToken");
                 const response = await fetch(
@@ -879,9 +582,10 @@ export default function TimetableManagement({
                   setPeriodStartDate("");
                   setPeriodEndDate("");
                   setMessage("Period saved.");
-                  loadClassSetup(setupClassId);
+                  loadClassSetup(tablePeriodClassId);
                 } else {
-                  setMessage("Unable to save period.");
+                  const err = await response.json().catch(() => ({}));
+                  setMessage(err?.message ?? err?.error ?? "Unable to save period.");
                 }
                 setIsPeriodSaving(false);
               }}
@@ -895,10 +599,19 @@ export default function TimetableManagement({
             </button>
           </div>
           <div className={styles.tableResponsive}>
+            {isPeriodsLoading ? (
+              <div className={styles.loadingCard}>
+                <div className={styles.skeletonTitle} />
+                <div className={styles.skeletonLine} />
+                <div className={styles.skeletonLine} />
+                <div className={styles.skeletonLine} />
+              </div>
+            ) : (
             <table className={styles.table}>
               <thead>
                 <tr>
                   <th>#</th>
+                  <th>Class</th>
                   <th>Day</th>
                   <th>Period</th>
                   <th>Time</th>
@@ -911,6 +624,7 @@ export default function TimetableManagement({
                 {classSetupPeriods.map((period, index) => (
                   <tr key={period.id}>
                     <td>{index + 1}</td>
+                    <td>{period.classCode ?? "-"}</td>
                     <td>{period.dayOfWeek}</td>
                     <td>{period.periodNo}</td>
                     <td>
@@ -950,7 +664,7 @@ export default function TimetableManagement({
                           );
                           if (response.ok) {
                             setMessage("Period deleted.");
-                            loadClassSetup(setupClassId);
+                            loadClassSetup(tablePeriodClassId);
                           } else {
                             setMessage("Unable to delete period.");
                           }
@@ -963,6 +677,7 @@ export default function TimetableManagement({
                 ))}
               </tbody>
             </table>
+            )}
           </div>
         </div>
       ) : isLoading ? (

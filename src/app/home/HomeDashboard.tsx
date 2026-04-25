@@ -12,6 +12,7 @@ const WIDGETS = [
   { key: "feesThisMonth",       label: "Fees This Month",      roles: ["admin", "accountant"] },
   { key: "transport",           label: "Transport" },
   { key: "hostel",              label: "Hostel" },
+  { key: "employees",            label: "Employees",            roles: ["admin"] },
   { key: "newAdmissions",       label: "New Admissions" },
   { key: "leaveRequests",       label: "Leave Requests",       roles: ["admin"] },
   { key: "collectionRate",      label: "Collection Rate",      roles: ["admin", "accountant"] },
@@ -37,6 +38,9 @@ type HomeDashboardProps = {
     classStudentCounts?: { classCode: string; present: number; absent: number }[];
     newAdmissionsThisMonth?: number;
     pendingLeaveCount?: number;
+    totalEmployees?: number;
+    workingEmployees?: number;
+    onLeaveEmployees?: number;
   } | null;
   isLoading?: boolean;
   onStudentClick?: (student: Student) => void;
@@ -142,6 +146,9 @@ export default function HomeDashboard({
 
   const newAdmissionsThisMonth = dashboardData?.newAdmissionsThisMonth ?? 0;
   const pendingLeaveCount = dashboardData?.pendingLeaveCount ?? 0;
+  const totalEmployees = dashboardData?.totalEmployees ?? 0;
+  const workingEmployees = dashboardData?.workingEmployees ?? 0;
+  const onLeaveEmployees = dashboardData?.onLeaveEmployees ?? 0;
   const feeCollectedAmount = dashboardData?.feeStats?.collectedAmount ?? 0;
   const feeCollectionRate = useMemo(() => {
     const { paid, unpaid, partial } = feeStats;
@@ -502,6 +509,36 @@ export default function HomeDashboard({
             />
           </div>
         </article>}
+
+        {/* Employees (admin only) */}
+        {role === "admin" && !hidden("employees") ? (
+          <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Employee Management")}>
+            <div className={styles.metricCardHeader}>
+              <h2 className={styles.metricTitle}>Employees</h2>
+              <div className={styles.metricIconBadge} aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </div>
+            </div>
+            <p className={styles.metricValue}>{totalEmployees}</p>
+            <div className={styles.metricSplit}>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitPresent}`}>Working {workingEmployees}</span>
+              <span className={`${styles.metricSplitBadge} ${styles.metricSplitAbsent}`}>On Leave {onLeaveEmployees}</span>
+            </div>
+            <div className={styles.metricBar}>
+              <span
+                className={styles.metricFill}
+                style={{ width: `${totalEmployees === 0 ? 0 : (workingEmployees / totalEmployees) * 100}%` }}
+              />
+              <span
+                className={styles.metricFillAlt}
+                style={{ width: `${totalEmployees === 0 ? 0 : (onLeaveEmployees / totalEmployees) * 100}%` }}
+              />
+            </div>
+          </article>
+        ) : null}
 
         {/* New Admissions This Month */}
         {!hidden("newAdmissions") && <article className={`${styles.metricCard} ${styles.cardClickable}`} onClick={() => onNavigate?.("Student Management")}>

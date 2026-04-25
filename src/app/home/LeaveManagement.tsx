@@ -3,16 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import { apiUrl } from "../../lib/api";
+import { DESIGNATION_OPTIONS } from "./data";
 
 type LeaveCategory = {
   id: number;
   name: string;
-  role: string;
+  roles?: string[];
+  /** legacy field — present when backend hasn't restarted yet */
+  role?: string;
   maxDays: number;
   periodType?: string | null;
   maxPerPeriod?: number | null;
   active: boolean;
 };
+
+/** Normalise old `role` string or new `roles` array into a string array */
+function getCatRoles(cat: LeaveCategory): string[] {
+  if (cat.roles && cat.roles.length > 0) return cat.roles;
+  if (cat.role) return cat.role.split(",").map((r) => r.trim()).filter(Boolean);
+  return [];
+}
 
 type LeaveRequest = {
   id: number;
@@ -35,7 +45,7 @@ type LeaveManagementProps = {
   role: string;
 };
 
-const roleOptions = ["admin", "teacher", "parent", "student", "accountant", "transport"];
+const roleOptions = DESIGNATION_OPTIONS;
 
 export default function LeaveManagement({ role }: LeaveManagementProps) {
   const [activeTab, setActiveTab] = useState(role === "admin" ? "Categories" : "Leave List");
@@ -48,13 +58,16 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
   );
 
   const [catName, setCatName] = useState("");
-  const [catRole, setCatRole] = useState("teacher");
+  const [catRoles, setCatRoles] = useState<string[]>(["teacher"]);
   const [catDays, setCatDays] = useState(1);
   const [catPeriodType, setCatPeriodType] = useState<"MONTHLY" | "YEARLY" | "">(
     ""
   );
   const [catMaxPerPeriod, setCatMaxPerPeriod] = useState(1);
   const [catActive, setCatActive] = useState(true);
+  const [editingCatId, setEditingCatId] = useState<number | null>(null);
+  const [deletingCatId, setDeletingCatId] = useState<number | null>(null);
+  const [catDeleteConfirm, setCatDeleteConfirm] = useState<LeaveCategory | null>(null);
 
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -62,6 +75,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
   const [reason, setReason] = useState("");
   const [attachmentKey, setAttachmentKey] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const isAdmin = role === "admin";
 
@@ -97,44 +111,32 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
     return () => window.clearTimeout(timer);
   }, [message]);
 
-  const uploadAttachment = async (file: File) => {
-    setUploadError(null);
-    const token = window.localStorage.getItem("authToken");
-    const uploadRequest = await fetch(
-      apiUrl(
-        `/api/leaves/upload?contentType=${encodeURIComponent(
-          file.type
-        )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
-      ),
-      {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      }
-    );
-    if (!uploadRequest.ok) {
-      setUploadError("Upload failed");
-      return null;
-    }
-    const { uploadUrl, objectKey } = await uploadRequest.json();
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
-    });
-    if (!uploadResponse.ok) {
-      setUploadError("Upload failed");
-      return null;
-    }
-    return objectKey as string;
-  };
-
   const handleAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const key = await uploadAttachment(file);
-    if (key) {
-      setAttachmentKey(key);
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(apiUrl("/api/leaves/upload-file"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        setUploadError(err?.error ?? "Upload failed. Please try again.");
+        return;
+      }
+      const data = await response.json();
+      setAttachmentKey(data.objectKey);
       setMessage("Attachment uploaded.");
+    } catch {
+      setUploadError("Upload failed. Check your connection and try again.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -181,6 +183,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
       setToDate("");
       setReason("");
       setAttachmentKey(null);
+      setUploadError(null);
       loadData();
     } else {
       let errorMessage = "Unable to submit leave.";
@@ -194,17 +197,34 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
     }
   };
 
+  const resetCatForm = () => {
+    setCatName("");
+    setCatRoles(["teacher"]);
+    setCatDays(1);
+    setCatPeriodType("");
+    setCatMaxPerPeriod(1);
+    setCatActive(true);
+    setEditingCatId(null);
+  };
+
   const handleCategorySave = async () => {
+    if (!catName.trim()) {
+      setMessage("Leave category name is required.");
+      return;
+    }
     const token = window.localStorage.getItem("authToken");
-    const response = await fetch(apiUrl("/api/leaves/categories"), {
-      method: "POST",
+    const url = editingCatId
+      ? apiUrl(`/api/leaves/categories/${editingCatId}`)
+      : apiUrl("/api/leaves/categories");
+    const response = await fetch(url, {
+      method: editingCatId ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         name: catName,
-        role: catRole,
+        roles: catRoles,
         maxDays: catDays,
         periodType: catPeriodType || null,
         maxPerPeriod: catPeriodType ? catMaxPerPeriod : null,
@@ -212,15 +232,40 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
       }),
     });
     if (response.ok) {
-      setMessage("Category saved.");
-      setCatName("");
-      setCatDays(1);
-      setCatPeriodType("");
-      setCatMaxPerPeriod(1);
+      setMessage(editingCatId ? "Category updated." : "Category saved.");
+      resetCatForm();
       loadData();
     } else {
       setMessage("Unable to save category.");
     }
+  };
+
+  const handleCategoryEdit = (cat: LeaveCategory) => {
+    setEditingCatId(cat.id);
+    setCatName(cat.name);
+    const resolved = getCatRoles(cat);
+    setCatRoles(resolved.length > 0 ? resolved : ["teacher"]);
+    setCatDays(cat.maxDays);
+    setCatPeriodType((cat.periodType as "MONTHLY" | "YEARLY" | "") ?? "");
+    setCatMaxPerPeriod(cat.maxPerPeriod ?? 1);
+    setCatActive(cat.active);
+  };
+
+  const handleCategoryDelete = async (cat: LeaveCategory) => {
+    setDeletingCatId(cat.id);
+    setCatDeleteConfirm(null);
+    const token = window.localStorage.getItem("authToken");
+    const response = await fetch(apiUrl(`/api/leaves/categories/${cat.id}`), {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (response.ok) {
+      setMessage("Category deleted.");
+      loadData();
+    } else {
+      setMessage("Unable to delete category.");
+    }
+    setDeletingCatId(null);
   };
 
   const handleDecision = async (id: number, status: string) => {
@@ -251,7 +296,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
   };
 
   const visibleCategories = useMemo(() => {
-    return isAdmin ? categories : categories.filter((c) => c.role === role);
+    return isAdmin ? categories : categories.filter((c) => getCatRoles(c).includes(role));
   }, [categories, isAdmin, role]);
 
   return (
@@ -281,7 +326,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
       ) : isAdmin && activeTab === "Categories" ? (
         <div className={styles.listLayout}>
           <div className={styles.profileSection}>
-            <div className={styles.sectionTitle}>Add Leave Category</div>
+            <div className={styles.sectionTitle}>{editingCatId ? "Edit Leave Category" : "Add Leave Category"}</div>
             <div className={styles.fieldGrid}>
               <label className={styles.label}>
                 Leave Category Name <span className={styles.requiredMark}>*</span>
@@ -291,20 +336,28 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                   onChange={(e) => setCatName(e.target.value)}
                 />
               </label>
-              <label className={styles.label}>
+              <div className={styles.label}>
                 Role <span className={styles.requiredMark}>*</span>
-                <select
-                  className={styles.input}
-                  value={catRole}
-                  onChange={(e) => setCatRole(e.target.value)}
-                >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", marginTop: "6px" }}>
                   {roleOptions.map((r) => (
-                    <option key={r} value={r}>
+                    <label key={r} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", fontWeight: 400, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={catRoles.includes(r)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCatRoles((prev) => [...prev, r]);
+                          } else {
+                            setCatRoles((prev) => prev.filter((x) => x !== r));
+                          }
+                        }}
+                      />
                       {r}
-                    </option>
+                    </label>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
+              <br></br>  <br></br>
               <label className={styles.label}>
                 Total Days <span className={styles.requiredMark}>*</span>
                 <input
@@ -352,8 +405,13 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
             </div>
             <div className={styles.formActions}>
               <button className={styles.button} type="button" onClick={handleCategorySave}>
-                Save
+                {editingCatId ? "Update Category" : "Save Category"}
               </button>
+              {editingCatId ? (
+                <button className={styles.inlineButton} type="button" onClick={resetCatForm}>
+                  Cancel
+                </button>
+              ) : null}
             </div>
           </div>
           <div className={styles.profileSection}>
@@ -369,6 +427,7 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                     <th>Period</th>
                     <th>Max Days/Period</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,11 +435,29 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
                     <tr key={cat.id}>
                       <td>{index + 1}</td>
                       <td>{cat.name}</td>
-                      <td>{cat.role}</td>
+                      <td>{getCatRoles(cat).join(", ") || "-"}</td>
                       <td>{cat.maxDays}</td>
                       <td>{cat.periodType ?? "-"}</td>
                       <td>{cat.maxPerPeriod ?? "-"}</td>
                       <td>{cat.active ? "Active" : "Inactive"}</td>
+                      <td>
+                        <button
+                          className={styles.inlineButton}
+                          type="button"
+                          onClick={() => handleCategoryEdit(cat)}
+                          disabled={deletingCatId === cat.id}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className={styles.inlineButton}
+                          type="button"
+                          onClick={() => setCatDeleteConfirm(cat)}
+                          disabled={deletingCatId === cat.id}
+                        >
+                          {deletingCatId === cat.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -504,7 +581,14 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
             </label>
             <label className={styles.label}>
               Attachment
-              <input className={styles.input} type="file" onChange={handleAttachment} />
+              <input
+                className={styles.input}
+                type="file"
+                onChange={handleAttachment}
+                disabled={isUploading}
+              />
+              {isUploading ? <span style={{ fontSize: "12px", color: "#64748b" }}>Uploading...</span> : null}
+              {!isUploading && attachmentKey ? <span style={{ fontSize: "12px", color: "#16a34a" }}>Attached</span> : null}
             </label>
             {uploadError ? <div className={styles.error}>{uploadError}</div> : null}
           </div>
@@ -541,6 +625,44 @@ export default function LeaveManagement({ role }: LeaveManagementProps) {
           </div>
         </div>
       )}
+
+      {catDeleteConfirm ? (
+        <div className={styles.modalBackdrop} onClick={() => setCatDeleteConfirm(null)}>
+          <div
+            className={styles.modalCard}
+            style={{ maxWidth: 440, padding: "28px 32px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "16px" }}>
+              <span style={{ fontSize: "22px", lineHeight: 1 }}>⚠️</span>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "#0f172a" }}>
+                Delete &quot;{catDeleteConfirm.name}&quot;?
+              </h3>
+            </div>
+            <div style={{ fontSize: "14px", color: "#475569", marginBottom: "24px" }}>
+              This will permanently remove the leave category. Existing leave requests using this category may be affected.
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => setCatDeleteConfirm(null)}
+                style={{ padding: "8px 20px" }}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => handleCategoryDelete(catDeleteConfirm)}
+                style={{ background: "#dc2626", padding: "8px 20px" }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

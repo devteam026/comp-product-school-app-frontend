@@ -13,6 +13,7 @@ import TimetableManagement from "./TimetableManagement";
 import LeaveManagement from "./LeaveManagement";
 import TransportManagement from "./TransportManagement";
 import HostelManagement from "./HostelManagement";
+import SchoolSetup from "./SchoolSetup";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -28,6 +29,7 @@ const menuItems = [
   "Fee Management",
   "Leave Management",
   "AI Insights",
+  "Setup School",
 ] as const;
 
 type MenuItem = (typeof menuItems)[number];
@@ -58,6 +60,9 @@ export default function HomeShell({
     dailyAttendance?: { day: string; present: number; absent: number }[];
     classAttendance?: { classCode: string; present: number; absent: number }[];
     classStudentCounts?: { classCode: string; present: number; absent: number }[];
+    totalEmployees?: number;
+    workingEmployees?: number;
+    onLeaveEmployees?: number;
   } | null>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
 
@@ -70,6 +75,7 @@ export default function HomeShell({
     if (role !== "admin") {
       items = items.filter(
         (item) =>
+          item !== "Setup School" &&
           item !== "Employee Management" &&
           item !== "Transport Management" &&
           item !== "Hostel Management"
@@ -147,9 +153,8 @@ export default function HomeShell({
     };
   }, [role, username]);
 
-  useEffect(() => {
+  const fetchAdminClasses = () => {
     if (role !== "admin") return;
-    let isActive = true;
     setIsAdminClassesLoading(true);
     const token = window.localStorage.getItem("authToken");
     fetch(apiUrl("/api/classes"), {
@@ -157,15 +162,16 @@ export default function HomeShell({
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: string[]) => {
-        if (!isActive) return;
         setAdminClassOptions(Array.isArray(data) ? data : []);
       })
       .finally(() => {
-        if (isActive) setIsAdminClassesLoading(false);
+        setIsAdminClassesLoading(false);
       });
-    return () => {
-      isActive = false;
-    };
+  };
+
+  useEffect(() => {
+    fetchAdminClasses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   const visibleStudents = useMemo(
@@ -183,6 +189,7 @@ export default function HomeShell({
 
   const subtitleMap: Record<MenuItem, string> = {
     Home: "School overview for the day and month.",
+    "Setup School": "Manage classes, sections, and subjects.",
     "Student Management": "Add and track students in one place.",
     "Employee Management": "Manage staff records and documents.",
     "Timetable Management": "Assign teachers to classes and periods.",
@@ -257,11 +264,14 @@ export default function HomeShell({
       },
       body: JSON.stringify(payload),
     });
-    const data = response.ok ? await response.json().catch(() => null) : null;
     if (response.ok) {
+      const data = await response.json().catch(() => null);
       fetchStudents(activeClass);
+      return { ok: true, student: data };
     }
-    return { ok: response.ok, student: data };
+    const errData = await response.json().catch(() => null);
+    const errorMsg = errData?.message ?? errData?.error ?? "Failed to save student.";
+    return { ok: false, student: null, error: errorMsg };
   };
 
   useEffect(() => {
@@ -287,6 +297,9 @@ export default function HomeShell({
           dailyAttendance: data.dailyAttendance,
           classAttendance: data.classAttendance,
           classStudentCounts: data.classStudentCounts,
+          totalEmployees: data.totalEmployees,
+          workingEmployees: data.workingEmployees,
+          onLeaveEmployees: data.onLeaveEmployees,
         });
       })
       .catch(() => {
@@ -432,6 +445,8 @@ export default function HomeShell({
                 onStudentClick={(student) => setSelectedProfile(student)}
                 onNavigate={(section) => setActiveItem(section as typeof activeItem)}
               />
+            ) : activeItem === "Setup School" ? (
+              <SchoolSetup onClassChange={fetchAdminClasses} activeClassCode={activeClass} />
             ) : activeItem === "Student Management" ? (
               <StudentManagement
                 students={visibleStudents}

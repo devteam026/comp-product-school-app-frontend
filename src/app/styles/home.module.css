@@ -194,6 +194,16 @@
   font-weight: 600;
 }
 
+.holidayNotice {
+  border: 1px solid #fb923c;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .requiredMark {
   color: #ef4444;
   margin-left: 4px;
@@ -990,6 +1000,48 @@
   background: #f1f5f9;
   color: #64748b;
   white-space: nowrap;
+}
+
+.attendanceSummary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.attendanceStat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+}
+
+.attendanceStat .statValue {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.attendanceStatPresent {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.attendanceStatAbsent {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #9f1239;
+}
+
+.attendanceStatTotal {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
 }
 
 .saveMessage {
