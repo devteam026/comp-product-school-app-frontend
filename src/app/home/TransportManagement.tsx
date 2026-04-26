@@ -153,8 +153,8 @@ export default function TransportManagement() {
     stopName: "",
     checkInTime: "",
     checkOutTime: "",
-    feeAmount: 0,
-    distanceKm: 0,
+    feeAmount: undefined,
+    distanceKm: undefined,
     active: true,
   });
   const [assignmentForm, setAssignmentForm] = useState({
@@ -166,6 +166,7 @@ export default function TransportManagement() {
   });
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveMessageType, setSaveMessageType] = useState<"success" | "error">("success");
+  const [deleteConfirm, setDeleteConfirm] = useState<{ url: string; lines: string[] } | null>(null);
 
   const showSaveMessage = (text: string, type: "success" | "error" = "success") => {
     setSaveMessage(text);
@@ -280,29 +281,19 @@ export default function TransportManagement() {
 
   const uploadVehicleDoc = async (file: File, type: string) => {
     const token = window.localStorage.getItem("authToken");
-    const uploadRequest = await fetch(
-      apiUrl(
-        `/api/transport/vehicles/upload?contentType=${encodeURIComponent(
-          file.type
-        )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}&type=${type}`
-      ),
-      {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      }
-    );
-    if (!uploadRequest.ok) {
-      throw new Error("Unable to start upload");
-    }
-    const { uploadUrl, objectKey } = await uploadRequest.json();
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", type);
+    const response = await fetch(apiUrl("/api/transport/vehicles/upload"), {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
     });
-    if (!uploadResponse.ok) {
-      throw new Error("Upload failed");
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error ?? "Upload failed");
     }
+    const { objectKey } = await response.json();
     return objectKey as string;
   };
 
@@ -606,7 +597,7 @@ export default function TransportManagement() {
               <div className={styles.sectionTitle}>Route Master</div>
               <div className={styles.fieldRow}>
                 <label className={styles.label}>
-                  Route Name
+                  Route Name<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={routeForm.name}
@@ -640,7 +631,8 @@ export default function TransportManagement() {
               <button
                 className={styles.button}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (!routeForm.name.trim()) { showSaveMessage("Route Name is required.", "error"); return; }
                   saveEntity(
                     routeForm.id ? `/api/transport/routes/${routeForm.id}` : "/api/transport/routes",
                     routeForm.id ? "PUT" : "POST",
@@ -652,8 +644,8 @@ export default function TransportManagement() {
                     } else {
                       showSaveMessage(result.error ?? "Failed to save route.", "error");
                     }
-                  })
-                }
+                  });
+                }}
               >
                 {routeForm.id ? "Update Route" : "Save Route"}
               </button>
@@ -684,7 +676,14 @@ export default function TransportManagement() {
                           <button
                             className={styles.inlineButton}
                             type="button"
-                            onClick={() => deleteEntity(`/api/transport/routes/${route.id}`)}
+                            onClick={() => {
+                              const routeStoppages = stoppages.filter((s) => s.routeName === route.name);
+                              const routeAssignments = assignments.filter((a) => a.routeName === route.name);
+                              const lines = [`Route: ${route.name}`];
+                              if (routeStoppages.length > 0) lines.push(`${routeStoppages.length} Stoppage(s): ${routeStoppages.map((s) => s.stopName).join(", ")}`);
+                              if (routeAssignments.length > 0) lines.push(`${routeAssignments.length} Assignment(s): ${routeAssignments.map((a) => `${a.vehicleNo}`).join(", ")}`);
+                              setDeleteConfirm({ url: `/api/transport/routes/${route.id}`, lines });
+                            }}
                           >
                             Delete
                           </button>
@@ -697,7 +696,7 @@ export default function TransportManagement() {
               <div className={styles.sectionTitle}>Vehicle Master</div>
               <div className={styles.fieldRow}>
                 <label className={styles.label}>
-                  Vehicle No
+                  Vehicle No<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={vehicleForm.vehicleNo}
@@ -707,7 +706,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Vehicle Type
+                  Vehicle Type<span className={styles.requiredMark}>*</span>
                   <select
                     className={styles.input}
                     value={vehicleForm.vehicleType}
@@ -723,7 +722,7 @@ export default function TransportManagement() {
                   </select>
                 </label>
                 <label className={styles.label}>
-                  Capacity
+                  Capacity<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     type="number"
@@ -738,7 +737,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Insurance Number
+                  Insurance Number<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={vehicleForm.insuranceNumber ?? ""}
@@ -748,7 +747,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Insurance Expiry Date
+                  Insurance Expiry Date<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     type="date"
@@ -887,10 +886,20 @@ export default function TransportManagement() {
                   ) : null}
                 </div>
               </div>
+              {saveMessage ? (
+                <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+                  {saveMessage}
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (!vehicleForm.vehicleNo.trim()) { showSaveMessage("Vehicle Number is required.", "error"); return; }
+                  if (!vehicleForm.vehicleType) { showSaveMessage("Vehicle Type is required.", "error"); return; }
+                  if (!vehicleForm.capacity || vehicleForm.capacity <= 0) { showSaveMessage("Bus Capacity is required.", "error"); return; }
+                  if (!vehicleForm.insuranceNumber?.trim()) { showSaveMessage("Insurance Number is required.", "error"); return; }
+                  if (!vehicleForm.insuranceExpiryDate?.trim()) { showSaveMessage("Insurance Expiry Date is required.", "error"); return; }
                   saveEntity(
                     vehicleForm.id ? `/api/transport/vehicles/${vehicleForm.id}` : "/api/transport/vehicles",
                     vehicleForm.id ? "PUT" : "POST",
@@ -904,8 +913,8 @@ export default function TransportManagement() {
                     } else {
                       showSaveMessage(result.error ?? "Failed to save vehicle.", "error");
                     }
-                  })
-                }
+                  });
+                }}
               >
                 {vehicleForm.id ? "Update Vehicle" : "Save Vehicle"}
               </button>
@@ -984,7 +993,12 @@ export default function TransportManagement() {
                           <button
                             className={styles.inlineButton}
                             type="button"
-                            onClick={() => deleteEntity(`/api/transport/vehicles/${vehicle.id}`)}
+                            onClick={() => {
+                              const vehicleAssignments = assignments.filter((a) => a.vehicleNo === vehicle.vehicleNo);
+                              const lines = [`Vehicle: ${vehicle.vehicleNo} (${vehicle.vehicleType ?? ""})`];
+                              if (vehicleAssignments.length > 0) lines.push(`${vehicleAssignments.length} Assignment(s): ${vehicleAssignments.map((a) => `Route ${a.routeName}`).join(", ")}`);
+                              setDeleteConfirm({ url: `/api/transport/vehicles/${vehicle.id}`, lines });
+                            }}
                           >
                             Delete
                           </button>
@@ -997,7 +1011,7 @@ export default function TransportManagement() {
               <div className={styles.sectionTitle}>Driver Master</div>
               <div className={styles.fieldRow}>
                 <label className={styles.label}>
-                  Employee (Transport)
+                  Employee (Transport)<span className={styles.requiredMark}>*</span>
                   <select
                     className={styles.input}
                     value={selectedTransportEmployeeId}
@@ -1035,7 +1049,7 @@ export default function TransportManagement() {
                   </select>
                 </label>
                 <label className={styles.label}>
-                  Name
+                  Name<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={driverForm.name}
@@ -1045,7 +1059,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Phone
+                  Phone<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={driverForm.phone}
@@ -1055,7 +1069,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Alternate No
+                  Alternate No<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={driverForm.alternatePhone}
@@ -1078,7 +1092,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  License No
+                  License No<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={driverForm.licenseNo}
@@ -1104,10 +1118,20 @@ export default function TransportManagement() {
                   </select>
                 </label>
               </div>
+              {saveMessage ? (
+                <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+                  {saveMessage}
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (!selectedTransportEmployeeId) { showSaveMessage("Employee is required.", "error"); return; }
+                  if (!driverForm.name.trim()) { showSaveMessage("Name is required.", "error"); return; }
+                  if (!driverForm.phone.trim()) { showSaveMessage("Phone Number is required.", "error"); return; }
+                  if (!driverForm.alternatePhone?.trim()) { showSaveMessage("Alternate Number is required.", "error"); return; }
+                  if (!driverForm.licenseNo?.trim()) { showSaveMessage("License Number is required.", "error"); return; }
                   saveEntity(
                     driverForm.id ? `/api/transport/drivers/${driverForm.id}` : "/api/transport/drivers",
                     driverForm.id ? "PUT" : "POST",
@@ -1120,8 +1144,8 @@ export default function TransportManagement() {
                     } else {
                       showSaveMessage(result.error ?? "Failed to save driver.", "error");
                     }
-                  })
-                }
+                  });
+                }}
               >
                 {driverForm.id ? "Update Driver" : "Save Driver"}
               </button>
@@ -1160,7 +1184,12 @@ export default function TransportManagement() {
                           <button
                             className={styles.inlineButton}
                             type="button"
-                            onClick={() => deleteEntity(`/api/transport/drivers/${driver.id}`)}
+                            onClick={() => {
+                              const driverAssignments = assignments.filter((a) => a.driverId === driver.id);
+                              const lines = [`Driver: ${driver.name} (${driver.phone})`];
+                              if (driverAssignments.length > 0) lines.push(`${driverAssignments.length} Assignment(s): ${driverAssignments.map((a) => `Route ${a.routeName}`).join(", ")}`);
+                              setDeleteConfirm({ url: `/api/transport/drivers/${driver.id}`, lines });
+                            }}
                           >
                             Delete
                           </button>
@@ -1178,7 +1207,7 @@ export default function TransportManagement() {
               <div className={styles.sectionTitle}>Stoppage Master</div>
               <div className={styles.fieldRow}>
                 <label className={styles.label}>
-                  Route
+                  Route<span className={styles.requiredMark}>*</span>
                   <select
                     className={styles.input}
                     value={stoppageForm.routeName}
@@ -1198,7 +1227,7 @@ export default function TransportManagement() {
                   </select>
                 </label>
                 <label className={styles.label}>
-                  Stop Name
+                  Stop Name<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     value={stoppageForm.stopName}
@@ -1211,7 +1240,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Check-in Time
+                  Check-in Time<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     type="time"
@@ -1225,7 +1254,7 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Check-out Time
+                  Check-out Time<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     type="time"
@@ -1239,29 +1268,31 @@ export default function TransportManagement() {
                   />
                 </label>
                 <label className={styles.label}>
-                  Amount
+                  Amount<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     type="number"
-                    value={stoppageForm.feeAmount}
+                    min={0}
+                    value={stoppageForm.feeAmount ?? ""}
                     onChange={(event) =>
                       setStoppageForm({
                         ...stoppageForm,
-                        feeAmount: Number(event.target.value),
+                        feeAmount: event.target.value === "" ? undefined : Number(event.target.value),
                       })
                     }
                   />
                 </label>
                 <label className={styles.label}>
-                  Distance (KM)
+                  Distance (KM)<span className={styles.requiredMark}>*</span>
                   <input
                     className={styles.input}
                     type="number"
-                    value={stoppageForm.distanceKm}
+                    min={0}
+                    value={stoppageForm.distanceKm ?? ""}
                     onChange={(event) =>
                       setStoppageForm({
                         ...stoppageForm,
-                        distanceKm: Number(event.target.value),
+                        distanceKm: event.target.value === "" ? undefined : Number(event.target.value),
                       })
                     }
                   />
@@ -1283,10 +1314,21 @@ export default function TransportManagement() {
                   </select>
                 </label>
               </div>
+              {saveMessage ? (
+                <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+                  {saveMessage}
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (!stoppageForm.routeName) { showSaveMessage("Route is required.", "error"); return; }
+                  if (!stoppageForm.stopName.trim()) { showSaveMessage("Stop Name is required.", "error"); return; }
+                  if (!stoppageForm.checkInTime) { showSaveMessage("Check-in Time is required.", "error"); return; }
+                  if (!stoppageForm.checkOutTime) { showSaveMessage("Check-out Time is required.", "error"); return; }
+                  if (!stoppageForm.feeAmount || stoppageForm.feeAmount <= 0) { showSaveMessage("Amount is required.", "error"); return; }
+                  if (!stoppageForm.distanceKm || stoppageForm.distanceKm <= 0) { showSaveMessage("Distance (KM) is required.", "error"); return; }
                   saveEntity(
                     stoppageForm.id
                       ? `/api/transport/stoppages/${stoppageForm.id}`
@@ -1296,12 +1338,12 @@ export default function TransportManagement() {
                   ).then((result) => {
                     if (result.ok) {
                       showSaveMessage(stoppageForm.id ? "Stoppage updated." : "Stoppage saved.");
-                      setStoppageForm({ id: 0, routeName: "", stopName: "", checkInTime: "", checkOutTime: "", feeAmount: 0, distanceKm: 0, active: true });
+                      setStoppageForm({ id: 0, routeName: "", stopName: "", checkInTime: "", checkOutTime: "", feeAmount: undefined, distanceKm: undefined, active: true });
                     } else {
                       showSaveMessage(result.error ?? "Failed to save stoppage.", "error");
                     }
-                  })
-                }
+                  });
+                }}
               >
                 {stoppageForm.id ? "Update Stoppage" : "Save Stoppage"}
               </button>
@@ -1342,7 +1384,10 @@ export default function TransportManagement() {
                           <button
                             className={styles.inlineButton}
                             type="button"
-                            onClick={() => deleteEntity(`/api/transport/stoppages/${stop.id}`)}
+                            onClick={() => setDeleteConfirm({
+                              url: `/api/transport/stoppages/${stop.id}`,
+                              lines: [`Stoppage: ${stop.stopName}`, `Route: ${stop.routeName}`, `Check-in: ${stop.checkInTime} | Check-out: ${stop.checkOutTime}`],
+                            })}
                           >
                             Delete
                           </button>
@@ -1360,7 +1405,7 @@ export default function TransportManagement() {
               <div className={styles.sectionTitle}>Assign Vehicle</div>
               <div className={styles.fieldRow}>
                 <label className={styles.label}>
-                  Route
+                  Route<span className={styles.requiredMark}>*</span>
                   <select
                     className={styles.input}
                     value={assignmentForm.routeName}
@@ -1380,7 +1425,7 @@ export default function TransportManagement() {
                   </select>
                 </label>
                 <label className={styles.label}>
-                  Vehicle No
+                  Vehicle No<span className={styles.requiredMark}>*</span>
                   <select
                     className={styles.input}
                     value={assignmentForm.vehicleNo}
@@ -1400,7 +1445,7 @@ export default function TransportManagement() {
                   </select>
                 </label>
                 <label className={styles.label}>
-                  Driver
+                  Driver<span className={styles.requiredMark}>*</span>
                   <select
                     className={styles.input}
                     value={assignmentForm.driverId || ""}
@@ -1436,10 +1481,18 @@ export default function TransportManagement() {
                   </select>
                 </label>
               </div>
+              {saveMessage ? (
+                <div className={saveMessageType === "error" ? styles.error : styles.saveMessage}>
+                  {saveMessage}
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (!assignmentForm.routeName) { showSaveMessage("Route is required.", "error"); return; }
+                  if (!assignmentForm.vehicleNo) { showSaveMessage("Vehicle is required.", "error"); return; }
+                  if (!assignmentForm.driverId) { showSaveMessage("Driver is required.", "error"); return; }
                   saveEntity(
                     assignmentForm.id
                       ? `/api/transport/assignments/${assignmentForm.id}`
@@ -1454,8 +1507,8 @@ export default function TransportManagement() {
                       driverId: 0,
                       active: true,
                     })
-                  )
-                }
+                  );
+                }}
               >
                 {assignmentForm.id ? "Update Assignment" : "Save Assignment"}
               </button>
@@ -1494,9 +1547,17 @@ export default function TransportManagement() {
                             <button
                               className={styles.inlineButton}
                               type="button"
-                              onClick={() =>
-                                deleteEntity(`/api/transport/assignments/${assignment.id}`)
-                              }
+                              onClick={() => {
+                                const driver = drivers.find((d) => d.id === assignment.driverId);
+                                setDeleteConfirm({
+                                  url: `/api/transport/assignments/${assignment.id}`,
+                                  lines: [
+                                    `Assignment: Route ${assignment.routeName}`,
+                                    `Vehicle: ${assignment.vehicleNo}`,
+                                    driver ? `Driver: ${driver.name} (${driver.phone})` : "Driver: —",
+                                  ],
+                                });
+                              }}
                             >
                               Delete
                             </button>
@@ -1511,6 +1572,44 @@ export default function TransportManagement() {
           ) : null}
         </div>
       )}
+
+      {deleteConfirm ? (
+        <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
+          <div className={styles.modalCard}>
+            <div className={styles.modalHeader}>
+              <h3>Confirm Delete</h3>
+            </div>
+            <div className={styles.modalBody}>
+              <p>The following will be permanently deleted:</p>
+              <ul style={{ margin: "8px 0 8px 16px", padding: 0, listStyle: "disc" }}>
+                {deleteConfirm.lines.map((line, i) => (
+                  <li key={i} style={{ marginBottom: 4 }}>{line}</li>
+                ))}
+              </ul>
+              <p style={{ color: "#ef4444", fontWeight: 600, marginTop: 8 }}>This action cannot be undone.</p>
+            </div>
+            <div className={styles.inlineActions}>
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => {
+                  deleteEntity(deleteConfirm.url);
+                  setDeleteConfirm(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -135,7 +135,7 @@ export default function AttendanceManagement({
             map[record.studentId] = record.status;
           });
         }
-        if (data?.isHoliday) {
+        if (data?.holiday) {
           setIsHoliday(true);
           setHolidayName(data.holidayName ?? null);
         }
