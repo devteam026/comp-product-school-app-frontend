@@ -166,7 +166,7 @@ export default function TransportManagement() {
   });
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveMessageType, setSaveMessageType] = useState<"success" | "error">("success");
-  const [deleteConfirm, setDeleteConfirm] = useState<{ url: string; lines: string[] } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ url: string; lines: string[]; note?: string } | null>(null);
 
   const showSaveMessage = (text: string, type: "success" | "error" = "success") => {
     setSaveMessage(text);
@@ -1387,6 +1387,7 @@ export default function TransportManagement() {
                             onClick={() => setDeleteConfirm({
                               url: `/api/transport/stoppages/${stop.id}`,
                               lines: [`Stoppage: ${stop.stopName}`, `Route: ${stop.routeName}`, `Check-in: ${stop.checkInTime} | Check-out: ${stop.checkOutTime}`],
+                              note: "Only this stoppage will be removed. The route and vehicle records will not be deleted.",
                             })}
                           >
                             Delete
@@ -1552,10 +1553,11 @@ export default function TransportManagement() {
                                 setDeleteConfirm({
                                   url: `/api/transport/assignments/${assignment.id}`,
                                   lines: [
-                                    `Assignment: Route ${assignment.routeName}`,
+                                    `Route: ${assignment.routeName}`,
                                     `Vehicle: ${assignment.vehicleNo}`,
                                     driver ? `Driver: ${driver.name} (${driver.phone})` : "Driver: —",
                                   ],
+                                  note: "Only this assignment will be removed. The vehicle and driver records will not be deleted.",
                                 });
                               }}
                             >
@@ -1580,12 +1582,15 @@ export default function TransportManagement() {
               <h3>Confirm Delete</h3>
             </div>
             <div className={styles.modalBody}>
-              <p>The following will be permanently deleted:</p>
+              <p>{deleteConfirm.note ? "Assignment details:" : "The following will be permanently deleted:"}</p>
               <ul style={{ margin: "8px 0 8px 16px", padding: 0, listStyle: "disc" }}>
                 {deleteConfirm.lines.map((line, i) => (
                   <li key={i} style={{ marginBottom: 4 }}>{line}</li>
                 ))}
               </ul>
+              {deleteConfirm.note ? (
+                <p style={{ color: "#6b7280", marginTop: 8 }}>{deleteConfirm.note}</p>
+              ) : null}
               <p style={{ color: "#ef4444", fontWeight: 600, marginTop: 8 }}>This action cannot be undone.</p>
             </div>
             <div className={styles.inlineActions}>
