@@ -26,15 +26,20 @@ export default function LoginPage() {
   const [campusImageUrl, setCampusImageUrl] = useState<string | null>(null);
   const [schoolUrl, setSchoolUrl] = useState<string | null>(null);
   const [isInfoLoading, setIsInfoLoading] = useState(true);
+  const [serviceDown, setServiceDown] = useState(false);
   const [showNoClassModal, setShowNoClassModal] = useState(false);
 
   useEffect(() => {
     let isActive = true;
     setIsInfoLoading(true);
     fetch(apiUrl("/api/school"))
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (!res.ok) throw new Error("Service unavailable");
+        return res.json();
+      })
       .then((data) => {
         if (!isActive || !data) return;
+        if (isActive) setServiceDown(false);
         setSchoolName(data.schoolName || schoolName);
         setAbout(data.about || about);
         setMission(data.mission || mission);
@@ -57,7 +62,7 @@ export default function LoginPage() {
         }
       })
       .catch(() => {
-        // keep defaults on failure
+        if (isActive) setServiceDown(true);
       })
       .finally(() => {
         if (isActive) setIsInfoLoading(false);
@@ -108,7 +113,7 @@ export default function LoginPage() {
       }
 
       if (token) {
-        await fetch("/api/session", {
+        await fetch("/nextapi/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
@@ -262,9 +267,14 @@ export default function LoginPage() {
               />
             </label>
 
+            {serviceDown ? (
+              <div className={styles.error}>
+                Services are currently unavailable. Please try again later or contact the administrator.
+              </div>
+            ) : null}
             {error ? <div className={styles.error}>{error}</div> : null}
 
-            <button className={styles.button} type="submit" disabled={isLoading}>
+            <button className={styles.button} type="submit" disabled={isLoading || serviceDown}>
               {isLoading ? "Signing in..." : "Sign in"}
             </button>
           </form>

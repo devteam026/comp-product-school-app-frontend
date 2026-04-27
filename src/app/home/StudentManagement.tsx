@@ -34,7 +34,7 @@ type SortField = (typeof sortFields)[number];
 
 type StudentManagementProps = {
   students: Student[];
-  onAddStudent: (student: Student) => Promise<{ ok: boolean; student?: Student | null }>;
+  onAddStudent: (student: Student) => Promise<{ ok: boolean; student?: Student | null; error?: string }>;
   role: string;
   username: string;
   classCode?: string;
@@ -197,6 +197,23 @@ export default function StudentManagement({
     "idle" | "saving" | "success" | "error"
   >("idle");
   const [editSaveMessage, setEditSaveMessage] = useState<string | null>(null);
+  const [addSaveMessage, setAddSaveMessage] = useState<string | null>(null);
+  const [addSaveStatus, setAddSaveStatus] = useState<"success" | "error" | null>(null);
+  const [listMessage, setListMessage] = useState<string | null>(null);
+  const [addValidationError, setAddValidationError] = useState<string | null>(null);
+  const [editValidationError, setEditValidationError] = useState<string | null>(null);
+
+  const showAddMessage = (text: string, type: "success" | "error" = "success") => {
+    setAddSaveMessage(text);
+    setAddSaveStatus(type);
+    setTimeout(() => { setAddSaveMessage(null); setAddSaveStatus(null); }, 4000);
+  };
+
+  const showEditMessage = (text: string, status: "success" | "error") => {
+    setEditSaveMessage(text);
+    setEditSaveStatus(status);
+    setTimeout(() => { setEditSaveMessage(null); setEditSaveStatus("idle"); }, 4000);
+  };
 
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("all");
@@ -420,7 +437,7 @@ export default function StudentManagement({
           const parsed = parseClassCode(classCode);
           return {
             classCode,
-            grade: item.grade ?? parsed.grade,
+            grade: item.name ?? item.grade ?? parsed.grade,
             section: item.section ?? parsed.section ?? "",
           };
         });
@@ -551,8 +568,18 @@ export default function StudentManagement({
     }
   };
 
+  const scrollToField = (id: string) => {
+    setTimeout(() => {
+      // Scroll to the error banner below the submit button so it's visible
+      document.getElementById("add-validation-error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Then highlight the problematic field
+      document.getElementById(id)?.focus();
+    }, 100);
+  };
+
   const handleAddStudent = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAddValidationError(null);
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
@@ -565,13 +592,79 @@ export default function StudentManagement({
       return;
     }
 
+    // Profile photo required
+    if (!profilePhotoKey) {
+      setAddValidationError("Profile photo is required. Please upload a photo.");
+      scrollToField("field-photo");
+      return;
+    }
+
+    // DOB year must be 4 digits
+    if (dateOfBirth) {
+      const dobYear = parseInt(dateOfBirth.split("-")[0], 10);
+      if (isNaN(dobYear) || String(dobYear).length !== 4 || dobYear < 1900 || dobYear > 2099) {
+        setAddValidationError("Date of Birth year must be a valid 4-digit year (e.g. 2010).");
+        scrollToField("field-dob");
+        return;
+      }
+    }
+
+    // Father name required
+    if (!fatherName.trim()) {
+      setAddValidationError("Father Name is required.");
+      scrollToField("field-fatherName");
+      return;
+    }
+
+    // Mother name required
+    if (!motherName.trim()) {
+      setAddValidationError("Mother Name is required.");
+      scrollToField("field-motherName");
+      return;
+    }
+
+    // Mobile required and 10 digits
+    if (!parentPhone.trim()) {
+      setAddValidationError("Mobile number is required.");
+      scrollToField("field-phone");
+      return;
+    }
+    if (parentPhone.replace(/\D/g, "").length !== 10) {
+      setAddValidationError("Mobile number must be exactly 10 digits.");
+      scrollToField("field-phone");
+      return;
+    }
+
+    // Transport stop required when transport enabled
+    if (transportRequired && !transportStopName.trim()) {
+      setAddValidationError("Please select a Transport Stop since transport is required.");
+      scrollToField("field-transportStop");
+      return;
+    }
+
+    // Duplicate roll number in same class
+    if (rollNumber.trim()) {
+      const duplicateRoll = students.find(
+        (s) =>
+          s.rollNumber.trim().toLowerCase() === rollNumber.trim().toLowerCase() &&
+          s.classCode === newClassCode
+      );
+      if (duplicateRoll) {
+        setAddValidationError(
+          `Roll number "${rollNumber.trim()}" is already assigned to "${duplicateRoll.name}" in class ${newClassCode}.`
+        );
+        scrollToField("field-rollNumber");
+        return;
+      }
+    }
+
     if (enableStudentLogin && studentPassword !== studentPasswordConfirm) {
       setStudentLoginError("Passwords do not match.");
       return;
     }
 
     const newStudent: Student = {
-      id: crypto.randomUUID(),
+      id: (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`),
       name: trimmedName,
       grade: safeGrade,
       section: normalizedSection,
@@ -602,6 +695,7 @@ export default function StudentManagement({
       previousQualification: previousQualification.trim(),
       studentPassword: enableStudentLogin ? studentPassword : "",
       status: "Active",
+      feeType: "Paid",
       history: ["Student record created"],
       profilePhotoKey: profilePhotoKey ?? undefined,
     };
@@ -617,6 +711,10 @@ export default function StudentManagement({
           hostelRoomNo.trim()
         );
       }
+      showAddMessage(`Student "${trimmedName}" added successfully.`);
+    } else {
+      showAddMessage(addResult.error ?? "Failed to add student. Please try again.", "error");
+      return;
     }
     setName("");
     setGrade("");
@@ -654,7 +752,6 @@ export default function StudentManagement({
     setProfilePhotoKey(null);
     setPhotoPreview(null);
     setPhotoError(null);
-    setActiveTab("List Students");
   };
 
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -664,30 +761,18 @@ export default function StudentManagement({
     setPhotoUploading(true);
     try {
       const token = window.localStorage.getItem("authToken");
-      const uploadRequest = await fetch(
-        apiUrl(
-          `/api/students/photo-upload?contentType=${encodeURIComponent(
-            file.type
-          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
-        ),
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRequest = await fetch(apiUrl("/api/students/photo-upload"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
       if (!uploadRequest.ok) {
         const err = await uploadRequest.json().catch(() => ({}));
-        throw new Error(err?.error ?? "Unable to start upload");
+        throw new Error(err?.error ?? "Unable to upload photo");
       }
-      const { uploadUrl, objectKey } = await uploadRequest.json();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
-      }
+      const { objectKey } = await uploadRequest.json();
       setProfilePhotoKey(objectKey);
       setPhotoPreview(URL.createObjectURL(file));
     } catch (err) {
@@ -761,8 +846,80 @@ export default function StudentManagement({
     }
   };
 
+  const editValidationFail = (message: string, fieldId: string) => {
+    setEditValidationError(message);
+    setTimeout(() => {
+      document.getElementById("edit-validation-error")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.getElementById(fieldId)?.focus();
+    }, 100);
+  };
+
   const handleSaveEdit = async () => {
     if (!editState) return;
+    setEditValidationError(null);
+
+    // Name required
+    if (!editState.name.trim()) {
+      editValidationFail("Student Name is required.", "edit-field-name");
+      return;
+    }
+
+    // DOB year must be 4 digits
+    if (editState.dateOfBirth) {
+      const dobYear = parseInt(editState.dateOfBirth.split("-")[0], 10);
+      if (isNaN(dobYear) || String(dobYear).length !== 4 || dobYear < 1900 || dobYear > 2099) {
+        editValidationFail("Date of Birth year must be a valid 4-digit year (e.g. 2010).", "edit-field-dob");
+        return;
+      }
+    }
+
+    // Father name required
+    if (!editState.fatherName.trim()) {
+      editValidationFail("Father Name is required.", "edit-field-fatherName");
+      return;
+    }
+
+    // Mother name required
+    if (!editState.motherName.trim()) {
+      editValidationFail("Mother Name is required.", "edit-field-motherName");
+      return;
+    }
+
+    // Mobile required and 10 digits
+    if (!editState.parentPhone.trim()) {
+      editValidationFail("Mobile number is required.", "edit-field-phone");
+      return;
+    }
+    if (editState.parentPhone.replace(/\D/g, "").length !== 10) {
+      editValidationFail("Mobile number must be exactly 10 digits.", "edit-field-phone");
+      return;
+    }
+
+    // Transport stop required when transport enabled
+    if (editState.transportRequired && !editState.transportStopName.trim()) {
+      editValidationFail("Please select a Transport Stop since transport is required.", "edit-field-transportStop");
+      return;
+    }
+
+    // Duplicate roll number in same class
+    if (editState.rollNumber.trim()) {
+      const editClassCode =
+        editState.section === "N/A" ? editState.grade : `${editState.grade}${editState.section}`;
+      const duplicateRoll = students.find(
+        (s) =>
+          s.id !== editState.id &&
+          s.rollNumber.trim().toLowerCase() === editState.rollNumber.trim().toLowerCase() &&
+          s.classCode === editClassCode
+      );
+      if (duplicateRoll) {
+        editValidationFail(
+          `Roll number "${editState.rollNumber.trim()}" is already assigned to "${duplicateRoll.name}" in class ${editClassCode}.`,
+          "edit-field-rollNumber"
+        );
+        return;
+      }
+    }
+
     if (editStudentPassword || editStudentPasswordConfirm) {
       if (editStudentPassword !== editStudentPasswordConfirm) {
         setEditLoginError("Passwords do not match.");
@@ -792,11 +949,11 @@ export default function StudentManagement({
         editState.hostelName.trim(),
         editState.hostelRoomNo.trim()
       );
-      setEditSaveStatus("success");
-      setEditSaveMessage("Student updated successfully.");
+      setListMessage("Student updated successfully.");
+      setTimeout(() => setListMessage(null), 4000);
+      setEditState(null);
     } else {
-      setEditSaveStatus("error");
-      setEditSaveMessage("Unable to save changes. Please try again.");
+      showEditMessage(saveResult.error ?? "Unable to save changes. Please try again.", "error");
     }
   };
 
@@ -855,7 +1012,7 @@ export default function StudentManagement({
       const importClassCode =
         importSection === "N/A" ? importGrade : `${importGrade}${importSection}`;
       const newStudent: Student = {
-        id: crypto.randomUUID(),
+        id: (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`),
         name: record.name ?? "",
         grade: importGrade,
         section: importSection,
@@ -885,6 +1042,7 @@ export default function StudentManagement({
         previousSchoolName: record.previousSchoolName ?? "",
         previousQualification: record.previousQualification ?? "",
         status: record.status === "Inactive" ? "Inactive" : "Active",
+        feeType: (record.feeType === "Free" ? "Free" : "Paid") as "Paid" | "Free",
         history: ["Imported from CSV"],
       };
       void onAddStudent(newStudent);
@@ -903,30 +1061,18 @@ export default function StudentManagement({
     setEditPhotoUploading(true);
     try {
       const token = window.localStorage.getItem("authToken");
-      const uploadRequest = await fetch(
-        apiUrl(
-          `/api/students/photo-upload?contentType=${encodeURIComponent(
-            file.type
-          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}`
-        ),
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRequest = await fetch(apiUrl("/api/students/photo-upload"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
       if (!uploadRequest.ok) {
         const err = await uploadRequest.json().catch(() => ({}));
-        throw new Error(err?.error ?? "Unable to start upload");
+        throw new Error(err?.error ?? "Unable to upload photo");
       }
-      const { uploadUrl, objectKey } = await uploadRequest.json();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
-      }
+      const { objectKey } = await uploadRequest.json();
       setEditState({ ...editState, profilePhotoKey: objectKey });
       setEditPhotoPreview(URL.createObjectURL(file));
     } catch (err) {
@@ -964,8 +1110,8 @@ export default function StudentManagement({
         <form className={styles.form} onSubmit={handleAddStudent}>
           <div className={styles.sectionTitle}>Student Details</div>
           <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              Profile Photo (Optional)
+            <label className={styles.label} id="field-photo">
+              Profile Photo <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="file"
@@ -1010,7 +1156,7 @@ export default function StudentManagement({
               </select>
             </label>
 
-            <label className={styles.label}>
+            <label className={styles.label} id="field-dob">
               Date of Birth <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
@@ -1043,7 +1189,7 @@ export default function StudentManagement({
               />
             </label>
 
-            <label className={styles.label}>
+            <label className={styles.label} id="field-rollNumber">
               Roll Number <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
@@ -1218,25 +1364,26 @@ export default function StudentManagement({
           ) : null}
 
           <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              Father Name 
+          
+            <label className={styles.label} id="field-fatherName">
+              Father Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
                 value={fatherName}
                 onChange={(event) => setFatherName(event.target.value)}
-                
+                required
               />
             </label>
 
-            <label className={styles.label}>
-              Mother Name 
+            <label className={styles.label} id="field-motherName">
+              Mother Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="text"
                 value={motherName}
                 onChange={(event) => setMotherName(event.target.value)}
-                
+                required
               />
             </label>
 
@@ -1267,14 +1414,15 @@ export default function StudentManagement({
               </select>
             </label>
 
-            <label className={styles.label}>
+            <label className={styles.label} id="field-phone">
               Mobile <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="tel"
                 value={parentPhone}
+                maxLength={10}
                 onChange={(event) => {
-                  const value = event.target.value;
+                  const value = event.target.value.replace(/\D/g, "").slice(0, 10);
                   setParentPhone(value);
                   if (whatsappSame) {
                     setParentWhatsapp(value);
@@ -1290,7 +1438,11 @@ export default function StudentManagement({
                 className={styles.input}
                 type="tel"
                 value={parentWhatsapp}
-                onChange={(event) => setParentWhatsapp(event.target.value)}
+                maxLength={10}
+                onChange={(event) => {
+                  const value = event.target.value.replace(/\D/g, "").slice(0, 10);
+                  setParentWhatsapp(value);
+                }}
                 required
               />
             </label>
@@ -1313,13 +1465,12 @@ export default function StudentManagement({
             </label>
 
             <label className={styles.label}>
-              Email <span className={styles.requiredMark}>*</span>
+              Email
               <input
                 className={styles.input}
                 type="email"
                 value={parentEmail}
                 onChange={(event) => setParentEmail(event.target.value)}
-                required
               />
             </label>
 
@@ -1356,7 +1507,7 @@ export default function StudentManagement({
           </div>
           {transportRequired ? (
             <div className={styles.fieldRow}>
-              <label className={styles.label}>
+              <label className={styles.label} id="field-transportStop">
                 Transport Stop <span className={styles.requiredMark}>*</span>
                 <select
                   className={styles.input}
@@ -1508,9 +1659,24 @@ export default function StudentManagement({
           <button className={styles.button} type="submit">
             Add Student
           </button>
+
+          {addValidationError ? (
+            <div className={styles.error} id="add-validation-error">
+              {addValidationError}
+            </div>
+          ) : null}
+
+          {addSaveMessage ? (
+            <div className={addSaveStatus === "error" ? styles.error : styles.saveMessage}>
+              {addSaveMessage}
+            </div>
+          ) : null}
         </form>
       ) : (
         <div className={styles.listLayout}>
+          {listMessage ? (
+            <div className={styles.saveMessage}>{listMessage}</div>
+          ) : null}
           <section className={styles.listPane}>
             <div className={styles.listToolbar}>
               <input
@@ -1757,7 +1923,7 @@ export default function StudentManagement({
                   {editPhotoError ? (
                     <div className={styles.error}>{editPhotoError}</div>
                   ) : null}
-                  <label className={styles.label}>
+                  <label className={styles.label} id="edit-field-name">
                     Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
@@ -1805,7 +1971,7 @@ export default function StudentManagement({
                       <option value="Female">Female</option>
                     </select>
                   </label>
-                  <label className={styles.label}>
+                  <label className={styles.label} id="edit-field-dob">
                     Date of Birth <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
@@ -1840,7 +2006,7 @@ export default function StudentManagement({
                       }
                     />
                   </label>
-                  <label className={styles.label}>
+                  <label className={styles.label} id="edit-field-rollNumber">
                     Roll Number <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
@@ -1886,7 +2052,7 @@ export default function StudentManagement({
                       }
                     />
                   </label>
-                  <label className={styles.label}>
+                  <label className={styles.label} id="edit-field-fatherName">
                     Father Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
@@ -1896,7 +2062,7 @@ export default function StudentManagement({
                       }
                     />
                   </label>
-                  <label className={styles.label}>
+                  <label className={styles.label} id="edit-field-motherName">
                     Mother Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
@@ -1935,13 +2101,15 @@ export default function StudentManagement({
                       ))}
                     </select>
                   </label>
-                  <label className={styles.label}>
+                  <label className={styles.label} id="edit-field-phone">
                     Mobile <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
+                      type="tel"
+                      maxLength={10}
                       value={editState.parentPhone}
                       onChange={(event) =>
-                        setEditState({ ...editState, parentPhone: event.target.value })
+                        setEditState({ ...editState, parentPhone: event.target.value.replace(/\D/g, "").slice(0, 10) })
                       }
                     />
                   </label>
@@ -1949,14 +2117,16 @@ export default function StudentManagement({
                     WhatsApp <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
+                      type="tel"
+                      maxLength={10}
                       value={editState.parentWhatsapp}
                       onChange={(event) =>
-                        setEditState({ ...editState, parentWhatsapp: event.target.value })
+                        setEditState({ ...editState, parentWhatsapp: event.target.value.replace(/\D/g, "").slice(0, 10) })
                       }
                     />
                   </label>
                   <label className={styles.label}>
-                    Email <span className={styles.requiredMark}>*</span>
+                    Email
                     <input
                       className={styles.input}
                       value={editState.parentEmail}
@@ -2004,7 +2174,7 @@ export default function StudentManagement({
                     </select>
                   </label>
                   {editState.transportRequired ? (
-                    <label className={styles.label}>
+                    <label className={styles.label} id="edit-field-transportStop">
                       Transport Stop <span className={styles.requiredMark}>*</span>
                       <select
                         className={styles.input}
@@ -2141,18 +2311,6 @@ export default function StudentManagement({
               </div>
             </div>
             <div className={styles.modalFooter}>
-              <div>
-                {editLoginError ? <div className={styles.error}>{editLoginError}</div> : null}
-                {editSaveMessage ? (
-                  <div
-                    className={
-                      editSaveStatus === "success" ? styles.success : styles.error
-                    }
-                  >
-                    {editSaveMessage}
-                  </div>
-                ) : null}
-              </div>
               <button
                 className={styles.button}
                 type="button"
@@ -2162,6 +2320,17 @@ export default function StudentManagement({
                 {editSaveStatus === "saving" ? "Saving..." : "Confirm & Save"}
               </button>
             </div>
+            {editValidationError ? (
+              <div className={styles.error} id="edit-validation-error">
+                {editValidationError}
+              </div>
+            ) : null}
+            {editLoginError ? <div className={styles.error}>{editLoginError}</div> : null}
+            {editSaveMessage ? (
+              <div className={editSaveStatus === "success" ? styles.saveMessage : styles.error}>
+                {editSaveMessage}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

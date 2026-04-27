@@ -13,6 +13,7 @@ import TimetableManagement from "./TimetableManagement";
 import LeaveManagement from "./LeaveManagement";
 import TransportManagement from "./TransportManagement";
 import HostelManagement from "./HostelManagement";
+import SchoolSetup from "./SchoolSetup";
 import { filterStudents, type Student } from "./data";
 import StudentProfileModal from "./StudentProfileModal";
 import { apiUrl } from "../../lib/api";
@@ -28,6 +29,7 @@ const menuItems = [
   "Fee Management",
   "Leave Management",
   "AI Insights",
+  "Setup School",
 ] as const;
 
 type MenuItem = (typeof menuItems)[number];
@@ -48,32 +50,39 @@ export default function HomeShell({
   const [sidebarBg, setSidebarBg] = useState(envSidebarBg);
   const [brandTitle, setBrandTitle] = useState(envBrandTitle);
   const [activeItem, setActiveItem] = useState<MenuItem>("Home");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Student | null>(null);
   const [dashboardData, setDashboardData] = useState<{
     attendanceToday?: { present: number; absent: number };
-    feeStats?: { paid: number; unpaid: number; free: number };
+    feeStats?: { paid: number; unpaid: number; partial: number };
     dailyAttendance?: { day: string; present: number; absent: number }[];
     classAttendance?: { classCode: string; present: number; absent: number }[];
     classStudentCounts?: { classCode: string; present: number; absent: number }[];
+    totalEmployees?: number;
+    workingEmployees?: number;
+    onLeaveEmployees?: number;
   } | null>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
 
   const role = displayRole.toLowerCase();
   const navItems = useMemo(() => {
-    let items = menuItems;
+    let items: MenuItem[] = [...menuItems];
     if (role !== "admin" && role !== "accountant") {
       items = items.filter((item) => item !== "Fee Management");
     }
     if (role !== "admin") {
       items = items.filter(
         (item) =>
+          item !== "Setup School" &&
           item !== "Employee Management" &&
-          item !== "Timetable Management" &&
           item !== "Transport Management" &&
           item !== "Hostel Management"
       );
+    }
+    if (role !== "admin" && role !== "teacher") {
+      items = items.filter((item) => item !== "Timetable Management");
     }
     return items;
   }, [role]);
@@ -144,9 +153,8 @@ export default function HomeShell({
     };
   }, [role, username]);
 
-  useEffect(() => {
+  const fetchAdminClasses = () => {
     if (role !== "admin") return;
-    let isActive = true;
     setIsAdminClassesLoading(true);
     const token = window.localStorage.getItem("authToken");
     fetch(apiUrl("/api/classes"), {
@@ -154,15 +162,16 @@ export default function HomeShell({
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: string[]) => {
-        if (!isActive) return;
         setAdminClassOptions(Array.isArray(data) ? data : []);
       })
       .finally(() => {
-        if (isActive) setIsAdminClassesLoading(false);
+        setIsAdminClassesLoading(false);
       });
-    return () => {
-      isActive = false;
-    };
+  };
+
+  useEffect(() => {
+    fetchAdminClasses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   const visibleStudents = useMemo(
@@ -180,6 +189,7 @@ export default function HomeShell({
 
   const subtitleMap: Record<MenuItem, string> = {
     Home: "School overview for the day and month.",
+    "Setup School": "Manage classes, sections, and subjects.",
     "Student Management": "Add and track students in one place.",
     "Employee Management": "Manage staff records and documents.",
     "Timetable Management": "Assign teachers to classes and periods.",
@@ -254,11 +264,14 @@ export default function HomeShell({
       },
       body: JSON.stringify(payload),
     });
-    const data = response.ok ? await response.json().catch(() => null) : null;
     if (response.ok) {
+      const data = await response.json().catch(() => null);
       fetchStudents(activeClass);
+      return { ok: true, student: data };
     }
-    return { ok: response.ok, student: data };
+    const errData = await response.json().catch(() => null);
+    const errorMsg = errData?.message ?? errData?.error ?? "Failed to save student.";
+    return { ok: false, student: null, error: errorMsg };
   };
 
   useEffect(() => {
@@ -284,6 +297,9 @@ export default function HomeShell({
           dailyAttendance: data.dailyAttendance,
           classAttendance: data.classAttendance,
           classStudentCounts: data.classStudentCounts,
+          totalEmployees: data.totalEmployees,
+          workingEmployees: data.workingEmployees,
+          onLeaveEmployees: data.onLeaveEmployees,
         });
       })
       .catch(() => {
@@ -300,8 +316,14 @@ export default function HomeShell({
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
+        {mobileMenuOpen && (
+          <div
+            className={styles.sidebarBackdrop}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
         <aside
-          className={styles.sidebar}
+          className={`${styles.sidebar} ${mobileMenuOpen ? styles.sidebarOpen : ""}`}
           style={
             sidebarBg
               ? ({ "--sidebar-bg": sidebarBg } as CSSProperties)
@@ -326,7 +348,7 @@ export default function HomeShell({
                   item === activeItem ? styles.navItemActive : ""
                 }`}
                 type="button"
-                onClick={() => setActiveItem(item)}
+                onClick={() => { setActiveItem(item); setMobileMenuOpen(false); }}
               >
                 {item}
               </button>
@@ -336,9 +358,21 @@ export default function HomeShell({
 
         <main className={styles.content}>
           <header className={styles.header}>
-            <div>
-              <h1 className={styles.title}>{activeItem}</h1>
-              <p className={styles.subtitle}>{subtitleMap[activeItem]}</p>
+            <div className={styles.headerTitle}>
+              <button
+                className={styles.menuToggle}
+                type="button"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                onClick={() => setMobileMenuOpen((prev) => !prev)}
+              >
+                <span />
+                <span />
+                <span />
+              </button>
+              <div>
+                <h1 className={styles.title}>{activeItem}</h1>
+                <p className={styles.subtitle}>{subtitleMap[activeItem]}</p>
+              </div>
             </div>
             <div className={styles.headerActions}>
               {role === "admin" ? (
@@ -405,9 +439,14 @@ export default function HomeShell({
               <HomeDashboard
                 students={visibleStudents}
                 role={role}
+                username={username}
                 dashboardData={dashboardData}
                 isLoading={isDashboardLoading}
+                onStudentClick={(student) => setSelectedProfile(student)}
+                onNavigate={(section) => setActiveItem(section as typeof activeItem)}
               />
+            ) : activeItem === "Setup School" ? (
+              <SchoolSetup onClassChange={fetchAdminClasses} activeClassCode={activeClass} />
             ) : activeItem === "Student Management" ? (
               <StudentManagement
                 students={visibleStudents}
@@ -423,6 +462,7 @@ export default function HomeShell({
               <TimetableManagement
                 activeClassCode={activeClass}
                 onSelectClass={(classCode) => setActiveClass(classCode)}
+                role={role}
               />
             ) : activeItem === "Transport Management" ? (
               <TransportManagement />
@@ -433,7 +473,7 @@ export default function HomeShell({
             ) : activeItem === "Attendance Management" ? (
               <AttendanceManagement students={visibleStudents} isLoading={isStudentsLoading} />
             ) : activeItem === "Fee Management" ? (
-              <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} />
+              <FeeManagement students={visibleStudents} isLoading={isStudentsLoading} classCode={activeClass} />
             ) : (
               <AIEngine
                 classCode={activeClass === "all" ? undefined : activeClass}

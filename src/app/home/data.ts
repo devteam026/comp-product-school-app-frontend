@@ -36,6 +36,9 @@ export type Student = {
   historyEntries?: { entry: string; createdAt?: string | null }[];
 };
 
+/** Canonical designation list — used in Employee Management and Leave Categories */
+export const DESIGNATION_OPTIONS = ["Teacher", "Accountant", "Clerk", "Driver", "Warden", "Caretaker", "Security", "Mess Staff", "Admin"] as const;
+
 export const seedStudents: Student[] = [
   {
     id: "1",

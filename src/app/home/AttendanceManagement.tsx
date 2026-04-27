@@ -15,7 +15,7 @@ type Status = "Present" | "Absent";
 
 const sortFields = ["name", "classCode", "rollNumber", "status"] as const;
 const pageSizeOptions = [10, 25, 50] as const;
-const tabs = ["Take Attendance"] as const;
+const tabs = ["Take Attendance", "View Attendance"] as const;
 
 type SortField = (typeof sortFields)[number];
 
@@ -30,11 +30,15 @@ export default function AttendanceManagement({
     () => new Date().toISOString().slice(0, 10)
   );
   const [attendance, setAttendance] = useState<Record<string, Status>>({});
+  const [savedAttendance, setSavedAttendance] = useState<Record<string, Status>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
+  const [isHoliday, setIsHoliday] = useState(false);
+  const [holidayName, setHolidayName] = useState<string | null>(null);
   const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const isAttendanceDateLocked = attendanceDate !== todayDate;
 
@@ -77,23 +81,13 @@ export default function AttendanceManagement({
     }));
   };
 
-  const presentCount = useMemo(() => {
-    return activeStudents.filter((student) => attendance[student.id] !== "Absent")
-      .length;
-  }, [activeStudents, attendance]);
-
-  const absentCount = useMemo(() => {
-    return activeStudents.filter((student) => attendance[student.id] === "Absent")
-      .length;
-  }, [activeStudents, attendance]);
-
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage(null);
 
     try {
       const token = window.localStorage.getItem("authToken");
-      const records = activeStudents.map((student) => ({
+      const records = filteredStudents.map((student) => ({
         studentId: student.id,
         status: attendance[student.id] ?? "Present",
       }));
@@ -125,20 +119,34 @@ export default function AttendanceManagement({
 
   const loadAttendance = async (date: string) => {
     setIsAttendanceLoading(true);
+    setAttendanceLoaded(false);
+    setIsHoliday(false);
+    setHolidayName(null);
     const token = window.localStorage.getItem("authToken");
-    const response = await fetch(apiUrl(`/api/attendance?date=${date}`), {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (response.ok) {
-      const data = await response.json().catch(() => null);
-      if (data?.records) {
-        const map: Record<string, Status> = {};
-        data.records.forEach((record: { studentId: string; status: Status }) => {
-          map[record.studentId] = record.status;
-        });
-        setAttendance(map);
+    try {
+      const response = await fetch(apiUrl(`/api/attendance?date=${date}`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const map: Record<string, Status> = {};
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.records) {
+          data.records.forEach((record: { studentId: string; status: Status }) => {
+            map[record.studentId] = record.status;
+          });
+        }
+        if (data?.holiday) {
+          setIsHoliday(true);
+          setHolidayName(data.holidayName ?? null);
+        }
       }
+      setAttendance(map);
+      setSavedAttendance(map);
+    } catch {
+      setAttendance({});
+      setSavedAttendance({});
     }
+    setAttendanceLoaded(true);
     setIsAttendanceLoading(false);
   };
 
@@ -172,6 +180,29 @@ export default function AttendanceManagement({
       return matchesQuery && matchesClass && matchesGender && matchesStatus;
     });
   }, [activeStudents, attendance, search, filterClass, filterGender, filterStatus]);
+
+  // Only students with a saved DB record — used in View Attendance tab
+  const viewStudents = useMemo(() => {
+    return filteredStudents.filter((student) => student.id in savedAttendance);
+  }, [filteredStudents, savedAttendance]);
+
+  const presentCount = useMemo(() => {
+    return filteredStudents.filter((student) => attendance[student.id] !== "Absent")
+      .length;
+  }, [filteredStudents, attendance]);
+
+  const absentCount = useMemo(() => {
+    return filteredStudents.filter((student) => attendance[student.id] === "Absent")
+      .length;
+  }, [filteredStudents, attendance]);
+
+  const viewPresentCount = useMemo(() => {
+    return viewStudents.filter((student) => savedAttendance[student.id] !== "Absent").length;
+  }, [viewStudents, savedAttendance]);
+
+  const viewAbsentCount = useMemo(() => {
+    return viewStudents.filter((student) => savedAttendance[student.id] === "Absent").length;
+  }, [viewStudents, savedAttendance]);
 
   const sortedStudents = useMemo(() => {
     const sorted = [...filteredStudents].sort((a, b) => {
@@ -211,7 +242,92 @@ export default function AttendanceManagement({
         ))}
       </div>
 
-      {isLoading || isAttendanceLoading ? (
+      {activeTab === "View Attendance" ? (
+        <div>
+          <div className={styles.fieldGrid}>
+            <label className={styles.label}>
+              Date
+              <input
+                className={styles.input}
+                type="date"
+                value={attendanceDate}
+                onChange={(event) => setAttendanceDate(event.target.value)}
+              />
+            </label>
+          </div>
+          {isLoading || isAttendanceLoading ? (
+            <div className={styles.loadingCard}>
+              <div className={styles.skeletonTitle} />
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLine} />
+            </div>
+          ) : activeStudents.length === 0 ? (
+            <div className={styles.empty}>No students available.</div>
+          ) : isHoliday ? (
+            <div className={styles.holidayNotice}>
+              This day is a holiday: <strong>{holidayName}</strong>.
+            </div>
+          ) : attendanceLoaded && viewStudents.length === 0 ? (
+            <div className={styles.empty}>No attendance recorded for this date.</div>
+          ) : (
+            <>
+              <div className={styles.attendanceSummary}>
+                <div className={`${styles.attendanceStat} ${styles.attendanceStatPresent}`}>
+                  Present <span className={styles.statValue}>{viewPresentCount}</span>
+                </div>
+                <div className={`${styles.attendanceStat} ${styles.attendanceStatAbsent}`}>
+                  Absent <span className={styles.statValue}>{viewAbsentCount}</span>
+                </div>
+                <div className={`${styles.attendanceStat} ${styles.attendanceStatTotal}`}>
+                  Total <span className={styles.statValue}>{viewStudents.length}</span>
+                </div>
+              </div>
+              <div className={styles.tableResponsive}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Student</th>
+                      <th>Class</th>
+                      <th>Roll #</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewStudents.map((student, index) => {
+                      const status: Status = savedAttendance[student.id];
+                      return (
+                        <tr key={student.id}>
+                          <td>{index + 1}</td>
+                          <td
+                            className={styles.rowClickable}
+                            onClick={() => setSelectedStudent(student)}
+                          >
+                            {student.name}
+                          </td>
+                          <td>{student.classCode}</td>
+                          <td>{student.rollNumber || "-"}</td>
+                          <td>
+                            <span
+                              className={
+                                status === "Present"
+                                  ? styles.statusPresent
+                                  : styles.statusAbsent
+                              }
+                            >
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      ) : isLoading || isAttendanceLoading ? (
         <div className={styles.loadingCard}>
           <div className={styles.skeletonTitle} />
           <div className={styles.skeletonLine} />
@@ -340,14 +456,18 @@ export default function AttendanceManagement({
                 className={styles.button}
                 type="button"
                 onClick={() => setShowConfirm(true)}
-                disabled={students.length === 0 || isSaving || isAttendanceDateLocked}
+                disabled={students.length === 0 || isSaving || isAttendanceDateLocked || isHoliday}
               >
                 {isSaving ? "Saving..." : "Save Attendance"}
               </button>
             </div>
           </div>
 
-          {isAttendanceDateLocked ? (
+          {isHoliday ? (
+            <div className={styles.holidayNotice}>
+              Today is a holiday: <strong>{holidayName}</strong>. Attendance cannot be saved.
+            </div>
+          ) : isAttendanceDateLocked ? (
             <div className={styles.notice}>
               Attendance can only be saved for today ({todayDate}).
             </div>
@@ -357,7 +477,7 @@ export default function AttendanceManagement({
           {students.length === 0 ? (
             <div className={styles.empty}>No students available.</div>
           ) : (
-            <table className={styles.table}>
+            <div className={styles.tableResponsive}><table className={styles.table}>
               <thead>
                 <tr>
                   <th>Student</th>
@@ -396,7 +516,7 @@ export default function AttendanceManagement({
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
 
           <div className={styles.pagination}>

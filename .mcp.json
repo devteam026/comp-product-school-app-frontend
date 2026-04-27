@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "frontend-graph": {
+      "command": "python3",
+      "args": [
+        "/Users/apple/company/school_project/.code-review-graph/server.py",
+        "serve"
+      ],
+      "type": "stdio"
+    },
+    "backend-graph": {
+      "command": "python3",
+      "args": [
+        "/Users/apple/company/school_backend/.code-review-graph/server.py",
+        "serve"
+      ],
+      "type": "stdio"
+    }
+  }
+}

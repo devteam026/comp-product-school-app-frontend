@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "../styles/home.module.css";
 import { apiUrl } from "../../lib/api";
+import { DESIGNATION_OPTIONS } from "./data";
 
 type TeacherDetails = {
   subjectsAssigned: string;
@@ -57,6 +58,8 @@ type Employee = {
   idProofKey?: string;
   resumeKey?: string;
   teacherDetails?: TeacherDetails;
+  loginRole?: string;
+  loginActive?: boolean;
 };
 
 type EmployeeManagementProps = {
@@ -71,7 +74,7 @@ const emptyTeacherDetails = (): TeacherDetails => ({
 });
 
 const departmentOptions = ["Teaching", "Accounts", "Admin", "Transport","Hostel"] as const;
-const designationOptions = ["Teacher", "Accountant", "Clerk", "Driver","Warden","Caretaker","security","mess staff"] as const;
+const designationOptions = DESIGNATION_OPTIONS;
 const employmentTypeOptions = ["Full-time", "Part-time", "Contract"] as const;
 
 const sanitizeDigits = (value: string, maxLen: number) =>
@@ -146,6 +149,8 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
   const [isClassLoading, setIsClassLoading] = useState(false);
   const [form, setForm] = useState<Employee>(() => emptyEmployee());
   const [editState, setEditState] = useState<Employee | null>(null);
+  const [viewState, setViewState] = useState<Employee | null>(null);
+  const [viewPhotoUrl, setViewPhotoUrl] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -201,9 +206,8 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     return () => window.clearTimeout(timer);
   }, [classMessage]);
 
-  useEffect(() => {
+  const openClassModal = () => {
     if (roleValue !== "teacher" || !roleEmployeeId) return;
-    let isActive = true;
     setShowClassModal(true);
     setIsClassLoading(true);
     const token = window.localStorage.getItem("authToken");
@@ -212,19 +216,13 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: string[]) => {
-        if (!isActive) return;
         setClassOptions(Array.isArray(data) ? data : []);
       })
       .finally(() => {
-        if (isActive) {
-          setClassSelection([]);
-          setIsClassLoading(false);
-        }
+        setClassSelection([]);
+        setIsClassLoading(false);
       });
-    return () => {
-      isActive = false;
-    };
-  }, [roleValue, roleEmployeeId]);
+  };
   const handleChange = (key: keyof Employee, value: string | number | boolean) => {
     setForm((prev) => ({
       ...prev,
@@ -261,37 +259,54 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     });
   };
 
-  const uploadFile = async (file: File, type: string) => {
+  const uploadPhoto = async (file: File) => {
     setUploadError(null);
     setIsUploading(true);
     try {
       const token = window.localStorage.getItem("authToken");
-      const uploadRequest = await fetch(
-        apiUrl(
-          `/api/employees/upload?contentType=${encodeURIComponent(
-            file.type
-          )}&fileName=${encodeURIComponent(file.name)}&sizeBytes=${file.size}&type=${type}`
-        ),
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
-      if (!uploadRequest.ok) {
-        throw new Error("Unable to start upload");
-      }
-      const { uploadUrl, objectKey } = await uploadRequest.json();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(apiUrl("/api/employees/photo-upload"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
       });
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.error ?? "Photo upload failed");
       }
-      return objectKey as string;
+      const data = await response.json();
+      return data.objectKey as string;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed";
+      const message = err instanceof Error ? err.message : "Photo upload failed";
+      setUploadError(message);
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const uploadDoc = async (file: File, type: string) => {
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      const token = window.localStorage.getItem("authToken");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", type);
+      const response = await fetch(apiUrl("/api/employees/doc-upload"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.error ?? "Document upload failed");
+      }
+      const data = await response.json();
+      return data.objectKey as string;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Document upload failed";
       setUploadError(message);
       return null;
     } finally {
@@ -303,7 +318,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     const file = event.target.files?.[0];
     if (!file) return;
     setSelectedFiles((prev) => ({ ...prev, profile: file.name }));
-    const objectKey = await uploadFile(file, "profile");
+    const objectKey = await uploadPhoto(file);
     if (objectKey) {
       setForm((prev) => ({ ...prev, profilePhotoKey: objectKey }));
       setPhotoPreview(URL.createObjectURL(file));
@@ -316,7 +331,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     const file = event.target.files?.[0];
     if (!file || !editState) return;
     setEditSelectedFiles((prev) => ({ ...prev, profile: file.name }));
-    const objectKey = await uploadFile(file, "profile");
+    const objectKey = await uploadPhoto(file);
     if (objectKey) {
       setEditState({ ...editState, profilePhotoKey: objectKey });
       setPhotoPreview(URL.createObjectURL(file));
@@ -330,7 +345,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
       const file = input.files?.[0];
       if (!file) return;
       setSelectedFiles((prev) => ({ ...prev, [type]: file.name }));
-      const objectKey = await uploadFile(file, type);
+      const objectKey = await uploadDoc(file, type);
       if (!objectKey) return;
       setForm((prev) => ({
         ...prev,
@@ -353,7 +368,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
       const file = input.files?.[0];
       if (!file || !editState) return;
       setEditSelectedFiles((prev) => ({ ...prev, [type]: file.name }));
-      const objectKey = await uploadFile(file, type);
+      const objectKey = await uploadDoc(file, type);
       if (!objectKey) return;
       setEditState({
         ...editState,
@@ -400,15 +415,34 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
       ["mobileNumber", "Mobile number is required."],
       ["whatsappNumber", "Whatsapp number is required."],
       ["addressLine1", "Address Line 1 is required."],
+      ["city", "City is required."],
+      ["state", "State is required."],
+      ["pinCode", "PIN Code is required."],
       ["emergencyContactName", "Emergency contact name is required."],
       ["emergencyContactNumber", "Emergency contact number is required."],
+      ["highestQualification", "Highest Qualification is required."],
+      ["specialization", "Specialization is required."],
+      ["universityName", "University Name is required."],
     ];
     required.forEach(([field, message]) => {
       const value = String(form[field] ?? "").trim();
       if (!value) errors[field as string] = message;
     });
+    if (!form.profilePhotoKey) {
+      errors.profilePhotoKey = "Profile photo is required.";
+    }
     if (!form.idProofKey) {
       errors.idProofKey = "ID proof upload is required.";
+    }
+    if (form.yearOfPassing == null || !String(form.yearOfPassing).trim()) {
+      errors.yearOfPassing = "Year of Passing is required.";
+    } else if (!/^\d{4}$/.test(String(form.yearOfPassing))) {
+      errors.yearOfPassing = "Year of passing must be 4 digits.";
+    }
+    if (form.experienceYears == null || !String(form.experienceYears).trim()) {
+      errors.experienceYears = "Experience is required.";
+    } else if (String(form.experienceYears).length > 2) {
+      errors.experienceYears = "Experience must be 2 digits.";
     }
     if (form.mobileNumber && !/^\d{10}$/.test(form.mobileNumber)) {
       errors.mobileNumber = "Mobile number must be 10 digits.";
@@ -416,11 +450,11 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     if (form.whatsappNumber && !/^\d{10}$/.test(form.whatsappNumber)) {
       errors.whatsappNumber = "Whatsapp number must be 10 digits.";
     }
-    if (form.yearOfPassing && !/^\d{4}$/.test(String(form.yearOfPassing))) {
-      errors.yearOfPassing = "Year of passing must be 4 digits.";
+    if (form.pinCode && !/^[1-9][0-9]{5}$/.test(form.pinCode)) {
+      errors.pinCode = "PIN code must be 6 digits and cannot start with 0.";
     }
-    if (form.experienceYears != null && String(form.experienceYears).length > 2) {
-      errors.experienceYears = "Experience must be 2 digits.";
+    if (form.emergencyContactNumber && !/^\d{10}$/.test(form.emergencyContactNumber)) {
+      errors.emergencyContactNumber = "Emergency contact number must be 10 digits.";
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -467,15 +501,34 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
       ["mobileNumber", "Mobile number is required."],
       ["whatsappNumber", "Whatsapp number is required."],
       ["addressLine1", "Address Line 1 is required."],
+      ["city", "City is required."],
+      ["state", "State is required."],
+      ["pinCode", "PIN Code is required."],
       ["emergencyContactName", "Emergency contact name is required."],
       ["emergencyContactNumber", "Emergency contact number is required."],
+      ["highestQualification", "Highest Qualification is required."],
+      ["specialization", "Specialization is required."],
+      ["universityName", "University Name is required."],
     ];
     required.forEach(([field, message]) => {
       const value = String(editState[field] ?? "").trim();
       if (!value) errors[field as string] = message;
     });
+    if (!editState.profilePhotoKey) {
+      errors.profilePhotoKey = "Profile photo is required.";
+    }
     if (!editState.idProofKey) {
       errors.idProofKey = "ID proof upload is required.";
+    }
+    if (editState.yearOfPassing == null || !String(editState.yearOfPassing).trim()) {
+      errors.yearOfPassing = "Year of Passing is required.";
+    } else if (!/^\d{4}$/.test(String(editState.yearOfPassing))) {
+      errors.yearOfPassing = "Year of passing must be 4 digits.";
+    }
+    if (editState.experienceYears == null || !String(editState.experienceYears).trim()) {
+      errors.experienceYears = "Experience is required.";
+    } else if (String(editState.experienceYears).length > 2) {
+      errors.experienceYears = "Experience must be 2 digits.";
     }
     if (editState.mobileNumber && !/^\d{10}$/.test(editState.mobileNumber)) {
       errors.mobileNumber = "Mobile number must be 10 digits.";
@@ -483,14 +536,11 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     if (editState.whatsappNumber && !/^\d{10}$/.test(editState.whatsappNumber)) {
       errors.whatsappNumber = "Whatsapp number must be 10 digits.";
     }
-    if (editState.yearOfPassing && !/^\d{4}$/.test(String(editState.yearOfPassing))) {
-      errors.yearOfPassing = "Year of passing must be 4 digits.";
+    if (editState.pinCode && !/^[1-9][0-9]{5}$/.test(editState.pinCode)) {
+      errors.pinCode = "PIN code must be 6 digits and cannot start with 0.";
     }
-    if (
-      editState.experienceYears != null &&
-      String(editState.experienceYears).length > 2
-    ) {
-      errors.experienceYears = "Experience must be 2 digits.";
+    if (editState.emergencyContactNumber && !/^\d{10}$/.test(editState.emergencyContactNumber)) {
+      errors.emergencyContactNumber = "Emergency contact number must be 10 digits.";
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -539,6 +589,22 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
       if (response.ok) {
         const data = await response.json();
         if (data?.url) setPhotoUrl(data.url);
+      }
+    }
+  };
+
+  const startView = async (employee: Employee) => {
+    setViewState(employee);
+    setViewPhotoUrl(null);
+    if (employee.id) {
+      const token = window.localStorage.getItem("authToken");
+      const response = await fetch(
+        apiUrl(`/api/employees/${employee.id}/file-url?type=profile`),
+        { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.url) setViewPhotoUrl(data.url);
       }
     }
   };
@@ -633,14 +699,18 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Profile Photo
+              Profile Photo <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="file"
-                accept="image/<span className={styles.requiredMark}>*</span>"
+                accept="image/*"
                 onChange={handlePhotoSelect}
                 disabled={isUploading}
               />
+              <span className={styles.helperText}>Max file size: 5 MB</span>
+              {fieldErrors.profilePhotoKey ? (
+                <span className={styles.error}>{fieldErrors.profilePhotoKey}</span>
+              ) : null}
             </label>
             {selectedFiles.profile ? (
               <div className={styles.helperText}>{selectedFiles.profile}</div>
@@ -713,28 +783,44 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              City
+              City <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.city}
                 onChange={(e) => handleChange("city", e.target.value)}
+                required
               />
+              {fieldErrors.city ? (
+                <span className={styles.error}>{fieldErrors.city}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
-              State
+              State <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.state}
                 onChange={(e) => handleChange("state", e.target.value)}
+                required
               />
+              {fieldErrors.state ? (
+                <span className={styles.error}>{fieldErrors.state}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
-              PIN Code
+              PIN Code <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.pinCode}
-                onChange={(e) => handleChange("pinCode", e.target.value)}
+                onChange={(e) =>
+                  handleChange("pinCode", sanitizeDigits(e.target.value, 6))
+                }
+                inputMode="numeric"
+                maxLength={6}
+                required
               />
+              {fieldErrors.pinCode ? (
+                <span className={styles.error}>{fieldErrors.pinCode}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
               Emergency Contact Name <span className={styles.requiredMark}>*</span>
@@ -756,8 +842,10 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 className={styles.input}
                 value={form.emergencyContactNumber}
                 onChange={(e) =>
-                  handleChange("emergencyContactNumber", e.target.value)
+                  handleChange("emergencyContactNumber", sanitizeDigits(e.target.value, 10))
                 }
+                inputMode="numeric"
+                maxLength={10}
                 required
               />
               {fieldErrors.emergencyContactNumber ? (
@@ -771,31 +859,43 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           <div className={styles.sectionTitle}>Academic / Qualification Details</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Highest Qualification
+              Highest Qualification <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.highestQualification}
                 onChange={(e) => handleChange("highestQualification", e.target.value)}
+                required
               />
+              {fieldErrors.highestQualification ? (
+                <span className={styles.error}>{fieldErrors.highestQualification}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
-              Specialization
+              Specialization <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.specialization}
                 onChange={(e) => handleChange("specialization", e.target.value)}
+                required
               />
+              {fieldErrors.specialization ? (
+                <span className={styles.error}>{fieldErrors.specialization}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
-              University Name
+              University Name <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.universityName}
                 onChange={(e) => handleChange("universityName", e.target.value)}
+                required
               />
+              {fieldErrors.universityName ? (
+                <span className={styles.error}>{fieldErrors.universityName}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
-              Year of Passing
+              Year of Passing <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.yearOfPassing ?? ""}
@@ -807,13 +907,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 }
                 inputMode="numeric"
                 maxLength={4}
+                required
               />
               {fieldErrors.yearOfPassing ? (
                 <span className={styles.error}>{fieldErrors.yearOfPassing}</span>
               ) : null}
             </label>
             <label className={styles.label}>
-              Experience (Years)
+              Experience (Years) <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 value={form.experienceYears ?? ""}
@@ -825,6 +926,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 }
                 inputMode="numeric"
                 maxLength={2}
+                required
               />
               {fieldErrors.experienceYears ? (
                 <span className={styles.error}>{fieldErrors.experienceYears}</span>
@@ -987,6 +1089,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           </div>
 
           <div className={styles.sectionTitle}>Uploads</div>
+          <div className={styles.helperText}>Max file size: 10 MB per document</div>
           <div className={styles.fieldGrid}>
             <button
               className={styles.uploadButton}
@@ -1124,7 +1227,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     <td>{employee.designation}</td>
                     <td>{employee.mobileNumber}</td>
                     <td>{employee.email}</td>
-                    <td>
+                    <td className={styles.actionCell}>
+                      <button
+                        className={styles.inlineButtonView}
+                        type="button"
+                        onClick={() => startView(employee)}
+                      >
+                        View
+                      </button>
                       <button
                         className={styles.inlineButton}
                         type="button"
@@ -1162,7 +1272,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </select>
             </label>
             <label className={styles.label}>
-              Employee (Username = Employee ID)
+              Employee (Username = 4-digit Employee ID, e.g. 0001)
               <select
                 className={styles.input}
                 value={roleEmployeeId}
@@ -1275,6 +1385,16 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   setRolePassword("");
                   setRolePasswordConfirm("");
                   setRoleMessage("Login role assigned successfully.");
+                  setEmployees((prev) =>
+                    prev.map((e) =>
+                      e.id === Number(roleEmployeeId)
+                        ? { ...e, loginRole: roleValue, loginActive: roleActive }
+                        : e
+                    )
+                  );
+                  if (roleValue === "teacher") {
+                    openClassModal();
+                  }
                 } else {
                   setRoleMessage("Failed to assign login role.");
                 }
@@ -1297,8 +1417,9 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     <th>Employee ID</th>
                     <th>Name</th>
                     <th>Department</th>
-                    <th>Role</th>
+                    <th>Login Role</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1309,8 +1430,72 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                         {employee.firstName} {employee.lastName}
                       </td>
                       <td>{employee.department || "-"}</td>
-                      <td>{employee.role || "-"}</td>
-                      <td>{employee.role ? "Active" : "-"}</td>
+                      <td>{employee.loginRole || "-"}</td>
+                      <td>{employee.loginActive === true ? "Active" : employee.loginActive === false ? "Inactive" : "-"}</td>
+                      <td>
+                        {employee.loginRole ? (
+                          <>
+                            <button
+                              className={styles.inlineButton}
+                              type="button"
+                              onClick={() => {
+                                setRoleEmployeeId(String(employee.id));
+                                setRoleValue(employee.loginRole ?? "");
+                                setRoleActive(employee.loginActive ?? true);
+                                setUpdatePassword(false);
+                                setRolePassword("");
+                                setRolePasswordConfirm("");
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className={styles.inlineButton}
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`Are you sure you want to delete login role for "${employee.firstName} ${employee.lastName}"?`)) return;
+                                const token = window.localStorage.getItem("authToken");
+                                const response = await fetch(
+                                  apiUrl(`/api/employees/${employee.id}/role`),
+                                  {
+                                    method: "DELETE",
+                                    headers: token
+                                      ? { Authorization: `Bearer ${token}` }
+                                      : undefined,
+                                  }
+                                );
+                                if (response.ok) {
+                                  setRoleMessage("Login role deleted.");
+                                  setEmployees((prev) =>
+                                    prev.map((e) =>
+                                      e.id === employee.id
+                                        ? { ...e, loginRole: undefined, loginActive: undefined }
+                                        : e
+                                    )
+                                  );
+                                } else {
+                                  setRoleMessage("Failed to delete login role.");
+                                }
+                              }}
+                            >
+                              Delete
+                            </button>
+                            {employee.loginRole === "teacher" ? (
+                              <button
+                                className={styles.inlineButton}
+                                type="button"
+                                onClick={() => {
+                                  setRoleEmployeeId(String(employee.id));
+                                  setRoleValue("teacher");
+                                  openClassModal();
+                                }}
+                              >
+                                Assign Classes
+                              </button>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1414,6 +1599,148 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
         </div>
       ) : null}
 
+      {viewState ? (
+        <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
+          <div className={styles.modalCard}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h3>Employee Details</h3>
+                <p className={styles.modalSubtitle}>
+                  {viewState.firstName} {viewState.middleName} {viewState.lastName} — ID: {viewState.employeeId ?? viewState.id}
+                </p>
+              </div>
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => setViewState(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              {/* Photo */}
+              {viewPhotoUrl ? (
+                <div className={styles.profileSection}>
+                  <img className={styles.profilePhoto} src={viewPhotoUrl} alt="Profile" />
+                </div>
+              ) : null}
+
+              <div className={styles.profileSection}>
+                <div className={styles.sectionTitle}>Basic Information</div>
+                <div className={styles.detailGrid}>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Full Name</span><span className={styles.detailValue}>{[viewState.firstName, viewState.middleName, viewState.lastName].filter(Boolean).join(" ")}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Gender</span><span className={styles.detailValue}>{viewState.gender || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Date of Birth</span><span className={styles.detailValue}>{viewState.dateOfBirth || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Blood Group</span><span className={styles.detailValue}>{viewState.bloodGroup || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Marital Status</span><span className={styles.detailValue}>{viewState.maritalStatus || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Nationality</span><span className={styles.detailValue}>{viewState.nationality || "—"}</span></div>
+                </div>
+              </div>
+
+              <div className={styles.profileSection}>
+                <div className={styles.sectionTitle}>Contact Details</div>
+                <div className={styles.detailGrid}>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Mobile</span><span className={styles.detailValue}>{viewState.mobileNumber || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>WhatsApp</span><span className={styles.detailValue}>{viewState.whatsappNumber || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Email</span><span className={styles.detailValue}>{viewState.email || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Address</span><span className={styles.detailValue}>{[viewState.addressLine1, viewState.addressLine2, viewState.city, viewState.state, viewState.pinCode].filter(Boolean).join(", ") || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Emergency Contact</span><span className={styles.detailValue}>{viewState.emergencyContactName || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Emergency Number</span><span className={styles.detailValue}>{viewState.emergencyContactNumber || "—"}</span></div>
+                </div>
+              </div>
+
+              <div className={styles.profileSection}>
+                <div className={styles.sectionTitle}>Qualification</div>
+                <div className={styles.detailGrid}>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Highest Qualification</span><span className={styles.detailValue}>{viewState.highestQualification || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Specialization</span><span className={styles.detailValue}>{viewState.specialization || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>University</span><span className={styles.detailValue}>{viewState.universityName || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Year of Passing</span><span className={styles.detailValue}>{viewState.yearOfPassing ?? "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Experience</span><span className={styles.detailValue}>{viewState.experienceYears != null ? `${viewState.experienceYears} yrs` : "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Previous Employer</span><span className={styles.detailValue}>{viewState.previousEmployer || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Certifications</span><span className={styles.detailValue}>{viewState.certifications || "—"}</span></div>
+                </div>
+              </div>
+
+              <div className={styles.profileSection}>
+                <div className={styles.sectionTitle}>Employment Details</div>
+                <div className={styles.detailGrid}>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Department</span><span className={styles.detailValue}>{viewState.department || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Designation</span><span className={styles.detailValue}>{viewState.designation || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Employment Type</span><span className={styles.detailValue}>{viewState.employmentType || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Date of Joining</span><span className={styles.detailValue}>{viewState.dateOfJoining || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Probation Period</span><span className={styles.detailValue}>{viewState.probationPeriod || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Work Location</span><span className={styles.detailValue}>{viewState.workLocation || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Shift Timing</span><span className={styles.detailValue}>{viewState.shiftTiming || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Role</span><span className={styles.detailValue}>{viewState.role || "—"}</span></div>
+                </div>
+              </div>
+
+              <div className={styles.profileSection}>
+                <div className={styles.sectionTitle}>Legal & Compliance</div>
+                <div className={styles.detailGrid}>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Aadhaar</span><span className={styles.detailValue}>{viewState.aadhaarNumber || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>PAN</span><span className={styles.detailValue}>{viewState.panNumber || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Passport</span><span className={styles.detailValue}>{viewState.passportNumber || "—"}</span></div>
+                  <div className={styles.detailRow}><span className={styles.detailLabel}>Driving License</span><span className={styles.detailValue}>{viewState.drivingLicense || "—"}</span></div>
+                </div>
+              </div>
+
+              {viewState.teacherDetails && isTeacher(viewState.department) ? (
+                <div className={styles.profileSection}>
+                  <div className={styles.sectionTitle}>Teacher Details</div>
+                  <div className={styles.detailGrid}>
+                    <div className={styles.detailRow}><span className={styles.detailLabel}>Subjects Assigned</span><span className={styles.detailValue}>{viewState.teacherDetails.subjectsAssigned || "—"}</span></div>
+                    <div className={styles.detailRow}><span className={styles.detailLabel}>Classes Assigned</span><span className={styles.detailValue}>{viewState.teacherDetails.classesAssigned || "—"}</span></div>
+                    <div className={styles.detailRow}><span className={styles.detailLabel}>Period Allocation</span><span className={styles.detailValue}>{viewState.teacherDetails.periodAllocation || "—"}</span></div>
+                    <div className={styles.detailRow}><span className={styles.detailLabel}>Class Teacher</span><span className={styles.detailValue}>{viewState.teacherDetails.classTeacher ? "Yes" : "No"}</span></div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className={styles.profileSection}>
+                <div className={styles.sectionTitle}>Documents</div>
+                <div className={styles.detailGrid}>
+                  <div className={styles.detailRow}>
+                    <span className={styles.detailLabel}>Contract</span>
+                    <span className={styles.detailValue}>
+                      {viewState.contractDocKey ? (
+                        <button className={styles.inlineButton} type="button" onClick={() => openFile(viewState.id, "contract")}>View</button>
+                      ) : "—"}
+                    </span>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <span className={styles.detailLabel}>ID Proof</span>
+                    <span className={styles.detailValue}>
+                      {viewState.idProofKey ? (
+                        <button className={styles.inlineButton} type="button" onClick={() => openFile(viewState.id, "idProof")}>View</button>
+                      ) : "—"}
+                    </span>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <span className={styles.detailLabel}>Resume</span>
+                    <span className={styles.detailValue}>
+                      {viewState.resumeKey ? (
+                        <button className={styles.inlineButton} type="button" onClick={() => openFile(viewState.id, "resume")}>View</button>
+                      ) : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => { setViewState(null); startEdit(viewState); }}
+              >
+                Edit Employee
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {editState ? (
         <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
           <div className={styles.modalCard}>
@@ -1491,14 +1818,18 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Profile Photo
+                    Profile Photo <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       type="file"
-                      accept="image/<span className={styles.requiredMark}>*</span>"
+                      accept="image/*"
                       onChange={handleEditPhotoSelect}
                       disabled={isUploading}
                     />
+                    <span className={styles.helperText}>Max file size: 5 MB</span>
+                    {fieldErrors.profilePhotoKey ? (
+                      <span className={styles.error}>{fieldErrors.profilePhotoKey}</span>
+                    ) : null}
                   </label>
                   {editSelectedFiles.profile ? (
                     <div className={styles.helperText}>
@@ -1590,28 +1921,44 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     />
                   </label>
                   <label className={styles.label}>
-                    City
+                    City <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.city}
                       onChange={(e) => handleEditChange("city", e.target.value)}
+                      required
                     />
+                    {fieldErrors.city ? (
+                      <span className={styles.error}>{fieldErrors.city}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
-                    State
+                    State <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.state}
                       onChange={(e) => handleEditChange("state", e.target.value)}
+                      required
                     />
+                    {fieldErrors.state ? (
+                      <span className={styles.error}>{fieldErrors.state}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
-                    PIN Code
+                    PIN Code <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.pinCode}
-                      onChange={(e) => handleEditChange("pinCode", e.target.value)}
+                      onChange={(e) =>
+                        handleEditChange("pinCode", sanitizeDigits(e.target.value, 6))
+                      }
+                      inputMode="numeric"
+                      maxLength={6}
+                      required
                     />
+                    {fieldErrors.pinCode ? (
+                      <span className={styles.error}>{fieldErrors.pinCode}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
                     Emergency Contact Name <span className={styles.requiredMark}>*</span>
@@ -1637,9 +1984,11 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                       onChange={(e) =>
                         handleEditChange(
                           "emergencyContactNumber",
-                          e.target.value
+                          sanitizeDigits(e.target.value, 10)
                         )
                       }
+                      inputMode="numeric"
+                      maxLength={10}
                       required
                     />
                     {fieldErrors.emergencyContactNumber ? (
@@ -1654,37 +2003,49 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 <div className={styles.sectionTitle}>Academic / Qualification Details</div>
                 <div className={styles.profileGrid}>
                   <label className={styles.label}>
-                    Highest Qualification
+                    Highest Qualification <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.highestQualification}
                       onChange={(e) =>
                         handleEditChange("highestQualification", e.target.value)
                       }
+                      required
                     />
+                    {fieldErrors.highestQualification ? (
+                      <span className={styles.error}>{fieldErrors.highestQualification}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
-                    Specialization
+                    Specialization <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.specialization}
                       onChange={(e) =>
                         handleEditChange("specialization", e.target.value)
                       }
+                      required
                     />
+                    {fieldErrors.specialization ? (
+                      <span className={styles.error}>{fieldErrors.specialization}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
-                    University Name
+                    University Name <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.universityName}
                       onChange={(e) =>
                         handleEditChange("universityName", e.target.value)
                       }
+                      required
                     />
+                    {fieldErrors.universityName ? (
+                      <span className={styles.error}>{fieldErrors.universityName}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
-                    Year of Passing
+                    Year of Passing <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.yearOfPassing ?? ""}
@@ -1696,13 +2057,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                       }
                       inputMode="numeric"
                       maxLength={4}
+                      required
                     />
-              {fieldErrors.yearOfPassing ? (
-                <span className={styles.error}>{fieldErrors.yearOfPassing}</span>
-              ) : null}
-            </label>
+                    {fieldErrors.yearOfPassing ? (
+                      <span className={styles.error}>{fieldErrors.yearOfPassing}</span>
+                    ) : null}
+                  </label>
                   <label className={styles.label}>
-                    Experience (Years)
+                    Experience (Years) <span className={styles.requiredMark}>*</span>
                     <input
                       className={styles.input}
                       value={editState.experienceYears ?? ""}
@@ -1714,11 +2076,12 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                       }
                       inputMode="numeric"
                       maxLength={2}
+                      required
                     />
-              {fieldErrors.experienceYears ? (
-                <span className={styles.error}>{fieldErrors.experienceYears}</span>
-              ) : null}
-            </label>
+                    {fieldErrors.experienceYears ? (
+                      <span className={styles.error}>{fieldErrors.experienceYears}</span>
+                    ) : null}
+                  </label>
                   <label className={styles.label}>
                     Previous Employer
                     <input
@@ -1877,6 +2240,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </div>
               <div className={styles.profileSection}>
                 <div className={styles.sectionTitle}>Uploads</div>
+                <div className={styles.helperText}>Max file size: 10 MB per document</div>
                 <div className={styles.profileGrid}>
                   <button
                     className={styles.uploadButton}
