@@ -78,9 +78,8 @@ type StudentDiscount = {
 
 type FineRule = {
   id: number;
-  daysFrom: number;
-  daysTo: number;
-  fineType: "PER_DAY" | "FIXED";
+  feeTypeId: number;
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
   value: string;
   active: boolean;
 };
@@ -208,9 +207,8 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
 
   const [fineRuleForm, setFineRuleForm] = useState<FineRule>({
     id: 0,
-    daysFrom: 0,
-    daysTo: 0,
-    fineType: "PER_DAY",
+    feeTypeId: 0,
+    frequency: "DAILY",
     value: "",
     active: true,
   });
@@ -246,6 +244,8 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [showDiscountInfo, setShowDiscountInfo] = useState(false);
   const [showPaymentInfo, setShowPaymentInfo] = useState(false);
+  const [waiveFine, setWaiveFine] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Academic year options derived from current year
   const academicYearOptions = useMemo(() => getAcademicYearOptions(), []);
@@ -468,7 +468,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     if (!paymentForm.paymentMode) { showMessage("Please select a payment mode.", "error"); return; }
     setSavingKey("payment");
     try {
-      await saveEntity("/api/fees/payments", "POST", paymentForm);
+      await saveEntity("/api/fees/payments", "POST", { ...paymentForm, waiveFine });
       setPaymentForm({
         studentId: "",
         paidAmount: "",
@@ -478,6 +478,8 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
         extraDiscountReason: "",
         approvedBy: "",
       });
+      setWaiveFine(false);
+      setShowPaymentModal(false);
       showMessage("Payment recorded successfully.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unable to record payment";
@@ -550,15 +552,6 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       if (applicableOn === "TRANSPORT") return feeTypes.find((t) => t.name.toLowerCase().includes("transport"))?.name ?? "Transport";
       return feeTypeMap.get(Number(applicableOn))?.name ?? applicableOn;
     };
-
-    const discountLines = [
-      ...activeDefaults.map((d) =>
-        `<li>${d.name} — ${d.discountType === "PERCENTAGE" ? `${d.value}%` : `₹${d.value}`} on ${resolveApplicableLabel(d.applicableOn)}</li>`
-      ),
-      ...studentSpecificDiscounts.map((d) =>
-        `<li>${d.name} — ${d.discountType === "PERCENTAGE" ? `${d.value}%` : `₹${d.value}`} on ${resolveApplicableLabel(d.applicableOn)} <span style="color:#64748b;font-size:9px;">(Student-specific)</span></li>`
-      ),
-    ].join("");
 
     const detailRows = payment.details.map((detail, idx) => {
       const due = dueIdMap.get(detail.dueId);
@@ -763,13 +756,6 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     </tfoot>
   </table>
 
-  ${(totalDefaultDiscount > 0 || totalExtraDiscount > 0) && discountLines ? `
-  <!-- Discounts Applied -->
-  <div style="border:1px solid #bbf7d0;border-radius:4px;padding:6px 10px;margin-bottom:8px;background:#f0fdf4;font-size:10px;color:#14532d;">
-    <strong style="font-size:11px;">Discounts Applied:</strong>
-    <ul style="margin:3px 0 0 16px;padding:0;">${discountLines}</ul>
-  </div>
-  ` : ""}
 
   <!-- Amount in Words -->
   <div class="words-bar">
@@ -851,6 +837,9 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     setSavingKey("generateDues");
     try {
       const classCodes = resolveClassCodes(generateForm.classCode);
+      let totalCreated = 0;
+      let totalSkipped = 0;
+      const allNotYetEffective: string[] = [];
       for (const cc of classCodes) {
         const response = await fetch(apiUrl("/api/fees/dues/generate"), {
           method: "POST",
@@ -861,9 +850,23 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           const err = await response.json().catch(() => ({}));
           throw new Error(err?.error ?? `Unable to generate dues for ${cc}`);
         }
+        const result = await response.json().catch(() => ({}));
+        totalCreated += result.created ?? 0;
+        totalSkipped += result.skipped ?? 0;
+        if (Array.isArray(result.notYetEffective)) {
+          for (const name of result.notYetEffective) {
+            if (!allNotYetEffective.includes(name)) allNotYetEffective.push(name);
+          }
+        }
       }
       await loadAll();
-      showMessage("Dues generated successfully.");
+      const parts: string[] = [];
+      if (totalCreated > 0) parts.push(`${totalCreated} due${totalCreated !== 1 ? "s" : ""} generated`);
+      if (totalSkipped > 0) parts.push(`${totalSkipped} already existed`);
+      if (allNotYetEffective.length > 0) parts.push(`not yet effective: ${allNotYetEffective.join(", ")}`);
+      showMessage(
+        parts.length > 0 ? parts.join(" · ") + "." : "No fee structures found for this month."
+      );
     } catch (err) {
       await loadAll();
       const msg = err instanceof Error ? err.message : "Unable to generate dues";
@@ -887,6 +890,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     setSavingKey("regenerateDues");
     try {
       const classCodes = resolveClassCodes(generateForm.classCode);
+      let totalUpdated = 0;
       for (const cc of classCodes) {
         const response = await fetch(apiUrl("/api/fees/dues/regenerate"), {
           method: "POST",
@@ -897,9 +901,13 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           const err = await response.json().catch(() => ({}));
           throw new Error(err?.error ?? `Unable to regenerate dues for ${cc}`);
         }
+        const updated = await response.json().catch(() => []);
+        totalUpdated += Array.isArray(updated) ? updated.length : 0;
       }
       await loadAll();
-      showMessage("Dues regenerated successfully (unpaid only).");
+      showMessage(totalUpdated > 0
+        ? `${totalUpdated} due${totalUpdated !== 1 ? "s" : ""} regenerated successfully (unpaid only).`
+        : "No unpaid dues found to regenerate for this month.");
     } catch (err) {
       await loadAll();
       const msg = err instanceof Error ? err.message : "Unable to regenerate dues";
@@ -1106,9 +1114,11 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   };
 
   const handleSaveFineRule = async () => {
-    if (fineRuleForm.daysFrom < 0) { showMessage("Please enter a valid 'From' day.", "error"); return; }
-    if (fineRuleForm.daysTo <= 0) { showMessage("Please enter a valid 'To' day.", "error"); return; }
+    if (!fineRuleForm.feeTypeId && fineRuleForm.feeTypeId !== 0) { showMessage("Please select a fee type.", "error"); return; }
     if (!fineRuleForm.value || parseFloat(fineRuleForm.value) <= 0) { showMessage("Please enter a valid fine amount.", "error"); return; }
+    // Check duplicate fee type (only one rule per fee type allowed)
+    const duplicate = fineRules.find(r => r.feeTypeId === fineRuleForm.feeTypeId && r.id !== fineRuleForm.id);
+    if (duplicate) { showMessage("A fine rule for this fee type already exists. Edit the existing rule instead.", "error"); return; }
     setSavingKey("fineRule");
     try {
       await saveEntity(
@@ -1116,7 +1126,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
         fineRuleForm.id ? "PUT" : "POST",
         fineRuleForm as unknown as Record<string, unknown>
       );
-      setFineRuleForm({ id: 0, daysFrom: 0, daysTo: 0, fineType: "PER_DAY", value: "", active: true });
+      setFineRuleForm({ id: 0, feeTypeId: 0, frequency: "DAILY", value: "", active: true });
       showMessage(fineRuleForm.id ? "Fine rule updated." : "Fine rule saved.");
     } catch (err) {
       showMessage(err instanceof Error ? err.message : "Failed to save fine rule.", "error");
@@ -1247,6 +1257,63 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     return totalNet.toFixed(2);
   }, [studentPendingDues, defaultDiscounts, studentDiscounts, paymentForm.studentId, paymentForm.paymentDate, feeTypeMap, studentTotalRemaining]);
 
+  // Compute full payment summary: outstanding, discount, fine, net payable
+  const paymentSummary = useMemo(() => {
+    const outstanding = parseFloat(studentTotalRemaining);
+    if (!paymentForm.studentId || studentPendingDues.length === 0) {
+      return { outstanding, totalDiscount: 0, totalFine: 0, netPayable: outstanding };
+    }
+    const payDate = paymentForm.paymentDate || new Date().toISOString().slice(0, 10);
+    const activeDefaults = defaultDiscounts.filter((d) => d.active);
+    const studentSpecific = studentDiscounts
+      .filter((sd) => sd.active && sd.studentId === paymentForm.studentId && sd.startDate <= payDate && sd.endDate >= payDate)
+      .map((sd) => defaultDiscounts.find((d) => d.id === sd.discountId))
+      .filter(Boolean) as DefaultDiscount[];
+    const activeRules = fineRules.filter((r) => r.active);
+
+    let totalDiscount = 0;
+    let totalFine = 0;
+    for (const due of studentPendingDues) {
+      const remaining = parseFloat(due.remainingAmount || "0");
+      // Discount calc
+      let disc = 0;
+      const isApp = (ao: string) => {
+        if (ao === "ALL") return true;
+        if (ao === "TUITION") return (feeTypeMap.get(due.feeTypeId)?.name ?? "").toLowerCase().includes("tuition") || (feeTypeMap.get(due.feeTypeId)?.name ?? "").toLowerCase().includes("tution");
+        if (ao === "TRANSPORT") return (feeTypeMap.get(due.feeTypeId)?.name ?? "").toLowerCase().includes("transport");
+        return Number(ao) === due.feeTypeId;
+      };
+      for (const def of activeDefaults) { if (!isApp(def.applicableOn)) continue; disc += def.discountType === "PERCENTAGE" ? remaining * parseFloat(def.value) / 100 : parseFloat(def.value); }
+      for (const def of studentSpecific) { if (!isApp(def.applicableOn)) continue; disc += def.discountType === "PERCENTAGE" ? remaining * parseFloat(def.value) / 100 : parseFloat(def.value); }
+      disc = Math.min(disc, remaining);
+      totalDiscount += disc;
+      // Fine calc
+      if (due.dueDate && payDate > due.dueDate) {
+        const d1 = new Date(due.dueDate);
+        const d2 = new Date(payDate);
+        const daysLate = Math.floor((d2.getTime() - d1.getTime()) / 86400000);
+        if (daysLate > 0) {
+          const hasSpecificRule = activeRules.some(r => r.feeTypeId !== 0 && r.feeTypeId === due.feeTypeId);
+          for (const rule of activeRules) {
+            if (rule.feeTypeId !== 0 && rule.feeTypeId !== due.feeTypeId) continue;
+            if (rule.feeTypeId === 0 && hasSpecificRule) continue;
+            let periods = 0;
+            if (rule.frequency === "DAILY") periods = daysLate;
+            else if (rule.frequency === "WEEKLY") periods = Math.ceil(daysLate / 7);
+            else if (rule.frequency === "MONTHLY") {
+              const m1 = d1.getFullYear() * 12 + d1.getMonth();
+              const m2 = d2.getFullYear() * 12 + d2.getMonth();
+              periods = Math.max(m2 - m1, 1);
+            }
+            totalFine += parseFloat(String(rule.value)) * periods;
+          }
+        }
+      }
+    }
+    const netPayable = outstanding - totalDiscount + (waiveFine ? 0 : totalFine);
+    return { outstanding, totalDiscount, totalFine, netPayable: Math.max(netPayable, 0) };
+  }, [studentPendingDues, defaultDiscounts, studentDiscounts, fineRules, paymentForm.studentId, paymentForm.paymentDate, feeTypeMap, studentTotalRemaining, waiveFine]);
+
   // Group pending dues by calendar month, sorted chronologically
   const duesByMonth = useMemo(() => {
     const map = new Map<string, { label: string; dues: typeof studentPendingDues; monthTotal: string }>();
@@ -1302,12 +1369,6 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
         </div>
       ) : (
         <>
-          {message ? (
-            <div className={messageType === "error" ? styles.error : styles.saveMessage}>
-              {message}
-            </div>
-          ) : null}
-
           {activeTab === "Fee Types" ? (
             <div className={styles.sectionCard}>
               <div className={styles.sectionTitle}>Fee Types</div>
@@ -1938,9 +1999,10 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               <select
                 className={styles.input}
                 value={paymentForm.studentId}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, studentId: event.target.value, paidAmount: "" })
-                }
+                onChange={(event) => {
+                  setPaymentForm({ ...paymentForm, studentId: event.target.value, paidAmount: "" });
+                  setWaiveFine(false);
+                }}
               >
                 <option value="">Select student</option>
                 {(paymentClassFilter
@@ -1963,26 +2025,6 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </div>
             ) : (
               <div className={styles.dueSummaryCard}>
-                {/* Overall total + Pay All */}
-                <div className={styles.dueSummaryHeader}>
-                  <div>
-                    <div className={styles.dueSummaryLabel}>Total Outstanding</div>
-                    <div className={styles.dueSummaryTotal}>₹ {studentTotalRemaining}</div>
-                    {studentNetAfterDiscount !== studentTotalRemaining && (
-                      <div style={{ fontSize: 12, color: "#166534", marginTop: 2 }}>
-                        After discount: <strong>₹ {studentNetAfterDiscount}</strong>
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    className={styles.payAllButton}
-                    type="button"
-                    onClick={() => setPaymentForm({ ...paymentForm, paidAmount: studentNetAfterDiscount })}
-                  >
-                    Pay All
-                  </button>
-                </div>
-
                 {/* One block per month */}
                 {duesByMonth.map((group) => {
                   const monthPaid = group.dues
@@ -2034,7 +2076,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                         <button
                           className={styles.payMonthButton}
                           type="button"
-                          onClick={() => setPaymentForm({ ...paymentForm, paidAmount: monthNetStr })}
+                          onClick={() => { setPaymentForm({ ...paymentForm, paidAmount: monthNetStr }); setShowPaymentModal(true); }}
                         >
                           Pay remaining
                         </button>
@@ -2088,6 +2130,63 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                   </div>
                   );
                 })}
+
+                {/* Payment summary breakdown — below month-wise dues */}
+                <div style={{ padding: "12px 16px", borderTop: "1px solid #e2e8f0", marginTop: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div className={styles.dueSummaryLabel}>Payment Summary</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>Outstanding Dues</span>
+                      <span>₹ {paymentSummary.outstanding.toFixed(2)}</span>
+                    </div>
+                    {paymentSummary.totalDiscount > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#166534" }}>
+                        <span>Discount</span>
+                        <span>− ₹ {paymentSummary.totalDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {paymentSummary.totalFine > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: waiveFine ? "#94a3b8" : "#dc2626" }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ textDecoration: waiveFine ? "line-through" : "none" }}>Fine</span>
+                          <button
+                            type="button"
+                            onClick={() => setWaiveFine(!waiveFine)}
+                            style={{
+                              background: waiveFine ? "#dc2626" : "#f1f5f9",
+                              color: waiveFine ? "#fff" : "#64748b",
+                              border: "none",
+                              borderRadius: 4,
+                              padding: "2px 8px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {waiveFine ? "Fined" : "Waive Fine"}
+                          </button>
+                        </span>
+                        <span style={{ textDecoration: waiveFine ? "line-through" : "none" }}>
+                          + ₹ {paymentSummary.totalFine.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 16, borderTop: "1px solid #e2e8f0", paddingTop: 8, marginTop: 4 }}>
+                      <span>Total Payable</span>
+                      <span>₹ {paymentSummary.netPayable.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <button
+                    className={styles.payAllButton}
+                    type="button"
+                    style={{ marginTop: 10, width: "100%" }}
+                    onClick={() => { setPaymentForm({ ...paymentForm, paidAmount: paymentSummary.netPayable.toFixed(2) }); setShowPaymentModal(true); }}
+                  >
+                    Pay Now — ₹ {paymentSummary.netPayable.toFixed(2)}
+                  </button>
+                </div>
               </div>
             )
           ) : null}
@@ -2128,6 +2227,69 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             );
           })()}
 
+          {/* Applicable fines info */}
+          {paymentForm.studentId && studentPendingDues.length > 0 && (() => {
+            const activeRules = fineRules.filter((r) => r.active);
+            if (activeRules.length === 0) return null;
+            const payDate = paymentForm.paymentDate || new Date().toISOString().slice(0, 10);
+            const fineBreakdown: { feeType: string; dueDate: string; daysLate: number; fineAmount: number; rules: string[] }[] = [];
+            for (const due of studentPendingDues) {
+              const dueDate = due.dueDate;
+              if (!dueDate || payDate <= dueDate) continue;
+              const d1 = new Date(dueDate);
+              const d2 = new Date(payDate);
+              const daysLate = Math.floor((d2.getTime() - d1.getTime()) / 86400000);
+              if (daysLate <= 0) continue;
+              let totalFine = 0;
+              const appliedRules: string[] = [];
+              const hasSpecificRule = activeRules.some(r => r.feeTypeId !== 0 && r.feeTypeId === due.feeTypeId);
+              for (const rule of activeRules) {
+                if (rule.feeTypeId !== 0 && rule.feeTypeId !== due.feeTypeId) continue;
+                if (rule.feeTypeId === 0 && hasSpecificRule) continue;
+                let periods = 0;
+                if (rule.frequency === "DAILY") periods = daysLate;
+                else if (rule.frequency === "WEEKLY") periods = Math.ceil(daysLate / 7);
+                else if (rule.frequency === "MONTHLY") {
+                  const m1 = d1.getFullYear() * 12 + d1.getMonth();
+                  const m2 = d2.getFullYear() * 12 + d2.getMonth();
+                  periods = Math.max(m2 - m1, 1);
+                }
+                const amt = parseFloat(String(rule.value)) * periods;
+                totalFine += amt;
+                const feeLabel = rule.feeTypeId === 0 ? "All Fee Types" : (feeTypeMap.get(rule.feeTypeId)?.name ?? String(rule.feeTypeId));
+                appliedRules.push(`₹${rule.value} × ${periods} ${rule.frequency.toLowerCase()} period${periods !== 1 ? "s" : ""} = ₹${amt.toFixed(2)} (${feeLabel})`);
+              }
+              if (totalFine > 0) {
+                fineBreakdown.push({
+                  feeType: feeTypeMap.get(due.feeTypeId)?.name ?? "Unknown",
+                  dueDate,
+                  daysLate,
+                  fineAmount: totalFine,
+                  rules: appliedRules,
+                });
+              }
+            }
+            if (fineBreakdown.length === 0) return null;
+            const totalAllFines = fineBreakdown.reduce((s, f) => s + f.fineAmount, 0);
+            return (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "10px 14px", margin: "10px 0", fontSize: 13, color: "#7f1d1d", lineHeight: 1.6 }}>
+                <strong>Applicable fines (total: ₹{totalAllFines.toFixed(2)}):</strong>
+                <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                  {fineBreakdown.map((f, i) => (
+                    <li key={i}>
+                      <strong>{f.feeType}</strong> (due {f.dueDate}, {f.daysLate} day{f.daysLate !== 1 ? "s" : ""} late) — <strong>₹{f.fineAmount.toFixed(2)}</strong>
+                      {f.rules.length > 0 && (
+                        <ul style={{ margin: "2px 0 0 16px", padding: 0, fontSize: 12, color: "#991b1b" }}>
+                          {f.rules.map((r, j) => <li key={j}>{r}</li>)}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
           {/* How Payments Work info toggle */}
           <div style={{ margin: "10px 0" }}>
             <button
@@ -2156,92 +2318,116 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             )}
           </div>
 
-          {/* Row 2: Amount, date, mode */}
-          <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              Paid Amount <span style={{ color: "#dc2626" }}>*</span>
-              <input
-                className={styles.input}
-                type="number"
-                placeholder="Enter amount"
-                value={paymentForm.paidAmount}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, paidAmount: event.target.value })
-                }
-              />
-            </label>
-            <label className={styles.label}>
-              Payment Date <span style={{ color: "#dc2626" }}>*</span>
-              <input
-                className={styles.input}
-                type="date"
-                value={paymentForm.paymentDate}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, paymentDate: event.target.value })
-                }
-              />
-            </label>
-            <label className={styles.label}>
-              Mode <span style={{ color: "#dc2626" }}>*</span>
-              <select
-                className={styles.input}
-                value={paymentForm.paymentMode}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, paymentMode: event.target.value })
-                }
-              >
-                <option value="Cash">Cash</option>
-                <option value="UPI">UPI</option>
-                <option value="Bank">Bank</option>
-              </select>
-            </label>
-          </div>
-
-          {/* Row 3: Extra discount fields */}
-          <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              Extra Discount
-              <input
-                className={styles.input}
-                type="number"
-                value={paymentForm.extraDiscount}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, extraDiscount: event.target.value })
-                }
-              />
-            </label>
-            <label className={styles.label}>
-              Extra Discount Reason
-              <input
-                className={styles.input}
-                value={paymentForm.extraDiscountReason}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, extraDiscountReason: event.target.value })
-                }
-              />
-            </label>
-            <label className={styles.label}>
-              Approved By
-              <input
-                className={styles.input}
-                value={paymentForm.approvedBy}
-                onChange={(event) =>
-                  setPaymentForm({ ...paymentForm, approvedBy: event.target.value })
-                }
-              />
-            </label>
-          </div>
-
-          <div className={styles.formActions}>
-            <button
-              className={`${styles.button} ${savingKey === "payment" ? styles.buttonLoading : ""}`}
-              type="button"
-              disabled={savingKey === "payment" || studentPendingDues.length === 0}
-              onClick={handlePayment}
-            >
-              {savingKey === "payment" ? "Recording…" : "Record Payment"}
-            </button>
-          </div>
+          {/* Payment Modal */}
+          {showPaymentModal && (
+            <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
+              <div className={styles.modalCard} style={{ maxWidth: 540 }}>
+                <div className={styles.modalHeader}>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0f172a" }}>Record Payment</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentModal(false)}
+                    style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#64748b" }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div className={styles.fieldRow}>
+                    <label className={styles.label}>
+                      Paid Amount <span style={{ color: "#dc2626" }}>*</span>
+                      <input
+                        className={styles.input}
+                        type="number"
+                        placeholder="Enter amount"
+                        value={paymentForm.paidAmount}
+                        onChange={(event) =>
+                          setPaymentForm({ ...paymentForm, paidAmount: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className={styles.label}>
+                      Payment Date <span style={{ color: "#dc2626" }}>*</span>
+                      <input
+                        className={styles.input}
+                        type="date"
+                        value={paymentForm.paymentDate}
+                        onChange={(event) =>
+                          setPaymentForm({ ...paymentForm, paymentDate: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className={styles.fieldRow}>
+                    <label className={styles.label}>
+                      Mode <span style={{ color: "#dc2626" }}>*</span>
+                      <select
+                        className={styles.input}
+                        value={paymentForm.paymentMode}
+                        onChange={(event) =>
+                          setPaymentForm({ ...paymentForm, paymentMode: event.target.value })
+                        }
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Bank">Bank</option>
+                      </select>
+                    </label>
+                    <label className={styles.label}>
+                      Extra Discount
+                      <input
+                        className={styles.input}
+                        type="number"
+                        value={paymentForm.extraDiscount}
+                        onChange={(event) =>
+                          setPaymentForm({ ...paymentForm, extraDiscount: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className={styles.fieldRow}>
+                    <label className={styles.label}>
+                      Extra Discount Reason
+                      <input
+                        className={styles.input}
+                        value={paymentForm.extraDiscountReason}
+                        onChange={(event) =>
+                          setPaymentForm({ ...paymentForm, extraDiscountReason: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className={styles.label}>
+                      Approved By
+                      <input
+                        className={styles.input}
+                        value={paymentForm.approvedBy}
+                        onChange={(event) =>
+                          setPaymentForm({ ...paymentForm, approvedBy: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className={styles.modalFooter}>
+                  <button
+                    className={styles.cancelButton}
+                    type="button"
+                    onClick={() => setShowPaymentModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`${styles.button} ${savingKey === "payment" ? styles.buttonLoading : ""}`}
+                    type="button"
+                    disabled={savingKey === "payment"}
+                    onClick={handlePayment}
+                  >
+                    {savingKey === "payment" ? "Recording…" : `Record Payment — ₹ ${paymentForm.paidAmount || "0"}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className={styles.tableSectionHeader}>
             <div className={styles.sectionTitle} style={{ borderBottom: "none", margin: 0, padding: 0 }}>Payment History</div>
@@ -2732,49 +2918,39 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           <div className={styles.sectionTitle}>Fine Rules</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              From (delay in days) <span style={{ color: "#dc2626" }}>*</span>
-              <input
-                className={styles.input}
-                type="number"
-                min={0}
-                placeholder="e.g. 1"
-                value={fineRuleForm.daysFrom}
-                onChange={(event) =>
-                  setFineRuleForm({ ...fineRuleForm, daysFrom: Number(event.target.value) })
-                }
-              />
-            </label>
-            <label className={styles.label}>
-              To (delay in days) <span style={{ color: "#dc2626" }}>*</span>
-              <input
-                className={styles.input}
-                type="number"
-                min={0}
-                placeholder="e.g. 7"
-                value={fineRuleForm.daysTo}
-                onChange={(event) =>
-                  setFineRuleForm({ ...fineRuleForm, daysTo: Number(event.target.value) })
-                }
-              />
-            </label>
-            <label className={styles.label}>
-              Fine Type <span style={{ color: "#dc2626" }}>*</span>
+              Applicable Fee Type <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
-                value={fineRuleForm.fineType}
+                value={fineRuleForm.feeTypeId}
                 onChange={(event) =>
-                  setFineRuleForm({
-                    ...fineRuleForm,
-                    fineType: event.target.value as FineRule["fineType"],
-                  })
+                  setFineRuleForm({ ...fineRuleForm, feeTypeId: Number(event.target.value) })
                 }
               >
-                <option value="PER_DAY">Per Day</option>
-                <option value="FIXED">Fixed</option>
+                <option value={0}>All Fee Types</option>
+                {feeTypes.filter((t) => t.active).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
               </select>
             </label>
             <label className={styles.label}>
-              Fine Amount (₹) <span style={{ color: "#dc2626" }}>*</span>
+              Frequency <span style={{ color: "#dc2626" }}>*</span>
+              <select
+                className={styles.input}
+                value={fineRuleForm.frequency}
+                onChange={(event) =>
+                  setFineRuleForm({
+                    ...fineRuleForm,
+                    frequency: event.target.value as FineRule["frequency"],
+                  })
+                }
+              >
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+              </select>
+            </label>
+            <label className={styles.label}>
+              Amount (₹) <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -2821,9 +2997,9 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Delay (in days)</th>
-                  <th>Fine Type</th>
-                  <th>Fine Amount (₹)</th>
+                  <th>Fee Type</th>
+                  <th>Frequency</th>
+                  <th>Amount (₹)</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -2839,17 +3015,15 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                   fineRules.map((rule, index) => (
                     <tr key={rule.id}>
                       <td data-label="#">{index + 1}</td>
-                      <td data-label="Delay (in days)">
-                        {rule.daysFrom === rule.daysTo
-                          ? `${rule.daysFrom} day${rule.daysFrom !== 1 ? "s" : ""}`
-                          : `${rule.daysFrom} – ${rule.daysTo} days`}
+                      <td data-label="Fee Type">
+                        {rule.feeTypeId === 0 ? "All Fee Types" : (feeTypeMap.get(rule.feeTypeId)?.name ?? String(rule.feeTypeId))}
                       </td>
-                      <td data-label="Fine Type">
-                        <span className={rule.fineType === "PER_DAY" ? styles.badgeBlue : styles.badgeOrange}>
-                          {rule.fineType === "PER_DAY" ? "Per Day" : "Fixed"}
+                      <td data-label="Frequency">
+                        <span className={rule.frequency === "DAILY" ? styles.badgeBlue : rule.frequency === "WEEKLY" ? styles.badgeOrange : styles.badgePurple}>
+                          {rule.frequency === "DAILY" ? "Daily" : rule.frequency === "WEEKLY" ? "Weekly" : "Monthly"}
                         </span>
                       </td>
-                      <td data-label="Fine Amount (₹)">₹{rule.value}</td>
+                      <td data-label="Amount (₹)">₹{rule.value}</td>
                       <td data-label="Status">
                         <span className={rule.active ? styles.badgeGreen : styles.badgeGray}>
                           {rule.active ? "Active" : "Inactive"}
@@ -2881,6 +3055,12 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           </div>
         </div>
       ) : null}
+
+          {message ? (
+            <div className={messageType === "error" ? styles.error : styles.saveMessage}>
+              {message}
+            </div>
+          ) : null}
         </>
       )}
 
