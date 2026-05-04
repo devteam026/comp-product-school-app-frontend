@@ -604,6 +604,95 @@
   border: 1px solid #cbd5f5;
 }
 
+.classCheckList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.classCheckItem {
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.classCheckItem:hover {
+  background: #f1f5f9;
+}
+
+.classCheckLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+  width: 100%;
+  border-radius: 6px;
+}
+
+.classCheckbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #16a34a;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.infoNote {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13.5px;
+  color: #92400e;
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.infoNoteTag {
+  display: inline-block;
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #78350f;
+  margin: 0 1px;
+}
+
+.roleTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.roleTagRemove {
+  background: none;
+  border: none;
+  color: #93c5fd;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 0 0 2px;
+}
+
+.roleTagRemove:hover {
+  color: #dc2626;
+}
+
 .sectionCard {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -877,6 +966,22 @@
 .inlineButtonView:hover {
   background: #dbeafe;
   border-color: #93c5fd;
+}
+
+.inlineButtonDelete {
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff1f2;
+  color: #dc2626;
+  cursor: pointer;
+}
+
+.inlineButtonDelete:hover {
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
 .actionCell {
@@ -1388,6 +1493,25 @@
   color: #dc2626;
 }
 
+.errorSummary {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 13px;
+  width: 100%;
+}
+
+.errorSummaryList {
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .success {
   margin-top: 6px;
   color: #15803d;
@@ -1450,6 +1574,53 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+}
+
+.listSearchBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  position: relative;
+}
+
+.listSearchInput {
+  flex: 1;
+  padding: 10px 40px 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #f8fafc;
+  outline: none;
+  transition: border-color 150ms;
+}
+
+.listSearchInput:focus {
+  border-color: #6366f1;
+  background: #fff;
+}
+
+.listSearchInput::placeholder {
+  color: #94a3b8;
+}
+
+.listSearchClear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.listSearchClear:hover {
+  color: #ef4444;
 }
 
 .tableResponsive {

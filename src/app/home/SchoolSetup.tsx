@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import styles from "../styles/home.module.css";
 import { apiUrl } from "../../lib/api";
 
@@ -19,7 +19,7 @@ type ConfirmDialog = {
 } | null;
 
 export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSetupProps) {
-  const [activeTab, setActiveTab] = useState<"School Profile" | "Classes" | "Subjects" | "Holidays">("School Profile");
+  const [activeTab, setActiveTab] = useState<"School Profile" | "Classes" | "Subjects" | "Holidays" | "Departments" | "System Roles">("School Profile");
   const [message, setMessage] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog>(null);
 
@@ -55,6 +55,20 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
   const [holidayDate, setHolidayDate] = useState("");
   const [holidayName, setHolidayName] = useState("");
   const [holidaySaving, setHolidaySaving] = useState(false);
+
+  // System Roles state
+  const [systemRoles, setSystemRoles] = useState<{ id: number; name: string }[]>([]);
+  const [systemRolesLoading, setSystemRolesLoading] = useState(false);
+  const [newRoleInput, setNewRoleInput] = useState("");
+  const [systemRoleSaving, setSystemRoleSaving] = useState(false);
+
+  // Dept-Designation mapping state
+  const ALL_DESIGNATION_OPTIONS = ["Teacher", "Accountant", "Clerk", "Driver", "Warden", "Caretaker", "Security", "Mess Staff", "Admin"];
+  const [deptDesignations, setDeptDesignations] = useState<Record<string, string[]>>({});
+  const [deptSaving, setDeptSaving] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  const [newRoleName, setNewRoleName] = useState("");
 
   // Subject state
   const [setupClassId, setSetupClassId] = useState(""); // form dropdown only
@@ -161,11 +175,21 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
 
   const handleAddHoliday = async () => {
     if (!holidayDate) {
-      setMessage("Date is required.");
+      setMessage("Please select a date for the holiday.");
+      return;
+    }
+    const parsedDate = new Date(holidayDate);
+    if (isNaN(parsedDate.getTime()) || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate)) {
+      setMessage("Invalid date format. Please select a valid date (YYYY-MM-DD).");
       return;
     }
     if (!holidayName.trim()) {
       setMessage("Holiday name is required.");
+      return;
+    }
+    const duplicate = holidays.find((h) => h.date === holidayDate);
+    if (duplicate) {
+      setMessage(`A holiday "${duplicate.name}" is already declared on this date.`);
       return;
     }
     setHolidaySaving(true);
@@ -254,6 +278,28 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab !== "Departments") return;
+    const token = window.localStorage.getItem("authToken");
+    fetch(apiUrl("/api/school/dept-designations"), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data: Record<string, string[]>) => setDeptDesignations(data));
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "System Roles") return;
+    setSystemRolesLoading(true);
+    const token = window.localStorage.getItem("authToken");
+    fetch(apiUrl("/api/system-roles"), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSystemRoles(data))
+      .finally(() => setSystemRolesLoading(false));
+  }, [activeTab]);
+
   const handleSaveClass = async () => {
     if (!className.trim()) {
       setMessage("Class name is required.");
@@ -263,7 +309,23 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
       setMessage("Section is required.");
       return;
     }
+    if (!classMaxStrength.trim()) {
+      setMessage("Max Strength is required.");
+      return;
+    }
+    const maxStrengthNum = Number(classMaxStrength);
+    if (!Number.isInteger(maxStrengthNum) || maxStrengthNum < 1) {
+      setMessage("Max Strength must be a positive whole number (e.g. 40).");
+      return;
+    }
     const computedClassCode = `${className.trim()}${classSection.trim()}`;
+    const duplicate = classes.find(
+      (c) => c.classCode === computedClassCode && c.id !== editingClassId
+    );
+    if (duplicate) {
+      setMessage(`Class "${computedClassCode}" already exists. Please use a different name or section.`);
+      return;
+    }
     const token = window.localStorage.getItem("authToken");
     const response = await fetch(
       apiUrl(editingClassId ? `/api/classes/manage/${editingClassId}` : "/api/classes/manage"),
@@ -329,6 +391,22 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
       setMessage("Select a class and enter subject name.");
       return;
     }
+    if (!editingSubjectId) {
+      const token = window.localStorage.getItem("authToken");
+      const checkRes = await fetch(apiUrl(`/api/timetable/subjects?classId=${setupClassId}`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (checkRes.ok) {
+        const existing: Subject[] = await checkRes.json();
+        const dup = existing.find(
+          (s) => s.name.trim().toLowerCase() === subjectName.trim().toLowerCase()
+        );
+        if (dup) {
+          setMessage(`Subject "${subjectName.trim()}" already exists for this class.`);
+          return;
+        }
+      }
+    }
     const token = window.localStorage.getItem("authToken");
     const response = await fetch(
       apiUrl(editingSubjectId ? `/api/timetable/subjects/${editingSubjectId}` : "/api/timetable/subjects"),
@@ -380,10 +458,24 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
     });
   };
 
+  const saveDeptMap = async (map: Record<string, string[]>) => {
+    setDeptSaving(true);
+    const token = window.localStorage.getItem("authToken");
+    await fetch(apiUrl("/api/school/dept-designations"), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(map),
+    });
+    setDeptSaving(false);
+  };
+
   return (
     <div className={styles.form}>
       <div className={styles.tabs}>
-        {(["School Profile", "Classes", "Subjects", "Holidays"] as const).map((tab) => (
+        {(["School Profile", "Classes", "Subjects", "Holidays", "Departments", "System Roles"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -522,7 +614,7 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
               />
             </label>
             <label className={styles.label}>
-              Max Strength
+              Max Strength <span className={styles.requiredMark}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -677,7 +769,7 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
             )}
           </div>
         </div>
-      ) : (
+      ) : activeTab === "Subjects" ? (
         <div className={styles.profileSection}>
           <div className={styles.sectionTitle}>Class Subjects</div>
           <div className={styles.fieldGrid}>
@@ -790,7 +882,302 @@ export default function SchoolSetup({ onClassChange, activeClassCode }: SchoolSe
             )}
           </div>
         </div>
-      )}
+      ) : activeTab === "Departments" ? (
+        <div className={styles.profileSection}>
+          <div className={styles.sectionTitle}>Departments</div>
+
+ 
+
+          {/* Add Department */}
+          <div className={styles.fieldGrid}>
+            <label className={styles.label}>
+              Department Name <span className={styles.requiredMark}>*</span>
+              <input
+                className={styles.input}
+                value={newDeptName}
+                onChange={(e) => setNewDeptName(e.target.value)}
+                placeholder="e.g. Science Lab, IT"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.form?.requestSubmit?.();
+                }}
+              />
+            </label>
+          </div>
+          <div className={styles.formActions}>
+            <button
+              className={styles.button}
+              type="button"
+              disabled={deptSaving}
+              onClick={async () => {
+                const name = newDeptName.trim();
+                if (!name) { setMessage("Department name is required."); return; }
+                if (deptDesignations[name] !== undefined) { setMessage("Department already exists."); return; }
+                const updated = { ...deptDesignations, [name]: [] };
+                setDeptDesignations(updated);
+                setNewDeptName("");
+                setExpandedDept(name);
+                setNewRoleName("");
+                await saveDeptMap(updated);
+                setMessage("Department added.");
+              }}
+            >
+              {deptSaving ? "Saving..." : "Add Department"}
+            </button>
+          </div>
+
+          {/* Department list */}
+          {Object.keys(deptDesignations).length === 0 ? (
+            <div className={styles.empty}>No departments configured yet. Add one above.</div>
+          ) : (
+            <div className={styles.tableResponsive} style={{ marginTop: 16 }}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Department</th>
+                    <th>Designations</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(deptDesignations).map(([dept, roles]) => (
+                    <React.Fragment key={dept}>
+                      <tr>
+                        <td style={{ fontWeight: 600, verticalAlign: "top", paddingTop: 12 }}>{dept}</td>
+                        <td>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {roles.length === 0 ? (
+                              <span style={{ color: "#94a3b8", fontSize: 13 }}>No roles yet</span>
+                            ) : roles.map((role) => (
+                              <span key={role} className={styles.roleTag}>
+                                {role}
+                                <button
+                                  className={styles.roleTagRemove}
+                                  type="button"
+                                  title={`Remove ${role}`}
+                                  onClick={async () => {
+                                    const updated = {
+                                      ...deptDesignations,
+                                      [dept]: roles.filter((r) => r !== role),
+                                    };
+                                    setDeptDesignations(updated);
+                                    await saveDeptMap(updated);
+                                  }}
+                                >×</button>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button
+                            className={styles.inlineButton}
+                            type="button"
+                            onClick={() => {
+                              setExpandedDept(expandedDept === dept ? null : dept);
+                              setNewRoleName("");
+                            }}
+                          >
+                            {expandedDept === dept ? "Close" : "Add Role"}
+                          </button>
+                          <button
+                            className={styles.inlineButtonDelete}
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete department "${dept}" and all its roles?`)) return;
+                              const updated = { ...deptDesignations };
+                              delete updated[dept];
+                              setDeptDesignations(updated);
+                              if (expandedDept === dept) setExpandedDept(null);
+                              await saveDeptMap(updated);
+                              setMessage(`Department "${dept}" deleted.`);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Expanded: Add Role row */}
+                      {expandedDept === dept ? (
+                        <tr key={`${dept}-add-role`}>
+                          <td />
+                          <td colSpan={2}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0" }}>
+                              <select
+                                className={styles.input}
+                                style={{ maxWidth: 220 }}
+                                value={newRoleName}
+                                onChange={(e) => setNewRoleName(e.target.value)}
+                              >
+                                <option value="">Select or type a role...</option>
+                                {ALL_DESIGNATION_OPTIONS.filter((d) => !roles.includes(d)).map((d) => (
+                                  <option key={d} value={d}>{d}</option>
+                                ))}
+                              </select>
+                              <input
+                                className={styles.input}
+                                style={{ maxWidth: 180 }}
+                                value={newRoleName}
+                                onChange={(e) => setNewRoleName(e.target.value)}
+                                placeholder="Or type custom role"
+                              />
+                              <button
+                                className={styles.button}
+                                type="button"
+                                disabled={deptSaving}
+                                onClick={async () => {
+                                  const role = newRoleName.trim();
+                                  if (!role) { setMessage("Role name is required."); return; }
+                                  if (roles.includes(role)) { setMessage("Role already added to this department."); return; }
+                                  const updated = {
+                                    ...deptDesignations,
+                                    [dept]: [...roles, role],
+                                  };
+                                  setDeptDesignations(updated);
+                                  setNewRoleName("");
+                                  await saveDeptMap(updated);
+                                }}
+                              >
+                                {deptSaving ? "..." : "Add Role"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : activeTab === "System Roles" ? (
+        <div className={styles.profileSection}>
+          <div className={styles.sectionTitle}>System Roles</div>
+          <div className={styles.infoNote}>
+
+            <strong>Reminder:</strong> Make sure to add essential roles in any departments —{" "}
+            <span className={styles.infoNoteTag}>Admin</span>{" "}
+            <span className={styles.infoNoteTag}>Teacher</span>{" "}
+            <span className={styles.infoNoteTag}>Driver</span>{" "}
+            <span className={styles.infoNoteTag}>Warden</span>{" "}
+            <span className={styles.infoNoteTag}>Student</span>{" "}
+            <span className={styles.infoNoteTag}>Parent</span>
+      
+          </div>
+
+          {/* Add Role */}
+          <div className={styles.fieldGrid}>
+            <label className={styles.label}>
+              Role Name <span className={styles.requiredMark}>*</span>
+              <input
+                className={styles.input}
+                value={newRoleInput}
+                onChange={(e) => setNewRoleInput(e.target.value)}
+                placeholder="e.g. driver, warden, accountant"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    document.getElementById("addSystemRoleBtn")?.click();
+                  }
+                }}
+              />
+            </label>
+          </div>
+          <div className={styles.formActions}>
+            <button
+              id="addSystemRoleBtn"
+              className={styles.button}
+              type="button"
+              disabled={systemRoleSaving}
+              onClick={async () => {
+                const name = newRoleInput.trim().toLowerCase();
+                if (!name) { setMessage("Role name is required."); return; }
+                setSystemRoleSaving(true);
+                const token = window.localStorage.getItem("authToken");
+                const res = await fetch(apiUrl("/api/system-roles"), {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({ name }),
+                });
+                if (res.ok) {
+                  const created = await res.json();
+                  setSystemRoles((prev) => [...prev, created]);
+                  setNewRoleInput("");
+                  setMessage("Role added.");
+                } else {
+                  const err = await res.json().catch(() => ({}));
+                  setMessage(err?.message ?? "Failed to add role.");
+                }
+                setSystemRoleSaving(false);
+              }}
+            >
+              {systemRoleSaving ? "Saving..." : "Add Role"}
+            </button>
+          </div>
+
+          {/* Roles list */}
+          {systemRolesLoading ? (
+            <div className={styles.loadingCard}>
+              <div className={styles.skeletonTitle} />
+              <div className={styles.skeletonLine} />
+            </div>
+          ) : systemRoles.length === 0 ? (
+            <div className={styles.empty}>No system roles added yet.</div>
+          ) : (
+            <div className={styles.tableResponsive}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Role Name</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {systemRoles.map((role, idx) => (
+                    <tr key={role.id}>
+                      <td>{idx + 1}</td>
+                      <td style={{ textTransform: "capitalize" }}>{role.name}</td>
+                      <td>
+                        <button
+                          className={styles.inlineButtonDelete}
+                          type="button"
+                          onClick={() =>
+                            setConfirmDialog({
+                              title: "Delete Role",
+                              lines: [`Delete role "${role.name}"? This cannot be undone.`],
+                              onConfirm: async () => {
+                                setConfirmDialog(null);
+                                const token = window.localStorage.getItem("authToken");
+                                const res = await fetch(apiUrl(`/api/system-roles/${role.id}`), {
+                                  method: "DELETE",
+                                  headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                                });
+                                if (res.ok) {
+                                  setSystemRoles((prev) => prev.filter((r) => r.id !== role.id));
+                                  setMessage("Role deleted.");
+                                } else {
+                                  setMessage("Failed to delete role.");
+                                }
+                              },
+                            })
+                          }
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {confirmDialog ? (
         <div className={styles.modalBackdrop} onClick={() => setConfirmDialog(null)}>
           <div

@@ -63,7 +63,7 @@ type DefaultDiscount = {
   name: string;
   discountType: "PERCENTAGE" | "FIXED";
   value: string;
-  applicableOn: "ALL" | "TUITION" | "TRANSPORT";
+  applicableOn: string;
   active: boolean;
 };
 
@@ -134,7 +134,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [feeStudents, setFeeStudents] = useState<Student[]>([]);
   const [classOptions, setClassOptions] = useState<
-    { classCode: string; grade: string; section: string }[]
+    { classCode: string; name: string; section: string }[]
   >([]);
 
   const [feeTypeForm, setFeeTypeForm] = useState<FeeType>({
@@ -154,20 +154,25 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     dueDay: 1,
     active: true,
   });
+  // IDs of all structures in the current edit group (empty = create mode)
+  const [editingGroupIds, setEditingGroupIds] = useState<number[]>([]);
 
   const [generateForm, setGenerateForm] = useState({
-    classCode: activeClassCode && activeClassCode !== "all" ? activeClassCode : "",
+    classCode: "",
     month: new Date().toISOString().slice(0, 7),
     academicYear: "",
   });
 
   // Keep generateForm.classCode in sync with the top-level class filter
+  // Resolve classCode (e.g. "1A") to grade name (e.g. "1")
   useEffect(() => {
-    setGenerateForm((prev) => ({
-      ...prev,
-      classCode: activeClassCode && activeClassCode !== "all" ? activeClassCode : "",
-    }));
-  }, [activeClassCode]);
+    if (activeClassCode && activeClassCode !== "all") {
+      const cls = classOptions.find((c) => c.classCode === activeClassCode);
+      setGenerateForm((prev) => ({ ...prev, classCode: cls ? cls.name : activeClassCode }));
+    } else {
+      setGenerateForm((prev) => ({ ...prev, classCode: "" }));
+    }
+  }, [activeClassCode, classOptions]);
 
   const [paymentClassFilter, setPaymentClassFilter] = useState(
     activeClassCode && activeClassCode !== "all" ? activeClassCode : ""
@@ -215,11 +220,13 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     status: "all",
     name: "",
     month: "",
+    rollNumber: "",
   });
 
   const [paymentFilters, setPaymentFilters] = useState({
     name: "",
     month: "",
+    rollNumber: "",
   });
 
   const PAGE_SIZE = 15;
@@ -233,10 +240,12 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   const [schoolProfile, setSchoolProfile] = useState<SchoolProfile>({});
 
   // Delete confirmation dialog
-  const [deleteConfirm, setDeleteConfirm] = useState<{ url: string; label: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ urls: string[]; label: string } | null>(null);
 
   // Student profile viewer (click name in tables)
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+  const [showDiscountInfo, setShowDiscountInfo] = useState(false);
+  const [showPaymentInfo, setShowPaymentInfo] = useState(false);
 
   // Academic year options derived from current year
   const academicYearOptions = useMemo(() => getAcademicYearOptions(), []);
@@ -257,6 +266,84 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   const feeTypeMap = useMemo(() => {
     return new Map(feeTypes.map((type) => [type.id, type]));
   }, [feeTypes]);
+
+  // Unique class names for fee structure dropdown (e.g. "1", "2", "UKG")
+  const uniqueGrades = useMemo(() => {
+    const seen = new Set<string>();
+    return classOptions.filter((cls) => {
+      if (seen.has(cls.name)) return false;
+      seen.add(cls.name);
+      return true;
+    });
+  }, [classOptions]);
+
+  // classCode (e.g. "1A") → class name/grade (e.g. "1")
+  const classCodeToName = useMemo(() => {
+    const map = new Map<string, string>();
+    classOptions.forEach((cls) => map.set(cls.classCode, cls.name));
+    return map;
+  }, [classOptions]);
+
+  // Group fee structures by (gradeName, feeTypeId, academicYear, effectiveFrom)
+  // so the table shows one row per class-level group, not per section.
+  type FeeStructureGroup = {
+    key: string;
+    gradeName: string;
+    feeTypeId: number;
+    academicYear: string;
+    effectiveFrom: string;
+    amount: number;
+    frequency: FeeStructure["frequency"];
+    dueDay: number;
+    active: boolean;
+    memberIds: number[];
+    classCodes: string[];
+    inconsistent: boolean;
+  };
+
+  const groupedFeeStructures = useMemo((): FeeStructureGroup[] => {
+    const map = new Map<string, FeeStructureGroup>();
+    for (const s of feeStructures) {
+      const gradeName = classCodeToName.get(s.classCode) ?? s.classCode;
+      const dueDay = (s as unknown as { dueDay?: number; due_day?: number }).dueDay ??
+        (s as unknown as { dueDay?: number; due_day?: number }).due_day ?? 0;
+      const key = `${gradeName}|${s.feeTypeId}|${s.academicYear}|${s.effectiveFrom}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.memberIds.push(s.id);
+        existing.classCodes.push(s.classCode);
+        if (
+          s.amount !== existing.amount ||
+          s.frequency !== existing.frequency ||
+          dueDay !== existing.dueDay ||
+          s.active !== existing.active
+        ) {
+          existing.inconsistent = true;
+        }
+      } else {
+        map.set(key, {
+          key,
+          gradeName,
+          feeTypeId: s.feeTypeId,
+          academicYear: s.academicYear,
+          effectiveFrom: s.effectiveFrom,
+          amount: s.amount,
+          frequency: s.frequency,
+          dueDay,
+          active: s.active,
+          memberIds: [s.id],
+          classCodes: [s.classCode],
+          inconsistent: false,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [feeStructures, classCodeToName]);
+
+  const resetFeeStructureForm = () => {
+    setFeeStructureForm({ id: 0, classCode: "", feeTypeId: 0, amount: 0, frequency: "MONTHLY", academicYear: "", effectiveFrom: "", dueDay: 1, active: true });
+    setEditingGroupIds([]);
+  };
 
   const fetchJson = async (url: string) => {
     const res = await fetch(apiUrl(url), { headers });
@@ -346,24 +433,39 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   };
 
   // Opens the confirm dialog; actual delete happens only on confirmation
-  const confirmDelete = (url: string, label: string) => {
-    setDeleteConfirm({ url, label });
+  const confirmDelete = (url: string | string[], label: string) => {
+    setDeleteConfirm({ urls: Array.isArray(url) ? url : [url], label });
   };
 
   const handleConfirmedDelete = async () => {
     if (!deleteConfirm) return;
+    const label = deleteConfirm.label;
     try {
-      await deleteEntity(deleteConfirm.url);
-      showMessage(`${deleteConfirm.label} deleted.`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unable to delete";
-      showMessage(msg, "error");
-    } finally {
+      for (const url of deleteConfirm.urls) {
+        const response = await fetch(apiUrl(url), { method: "DELETE", headers });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err?.error ?? "Unable to delete");
+        }
+      }
+      await loadAll();
+      // If we deleted structures that were being edited, clear the form
+      if (editingGroupIds.length > 0) resetFeeStructureForm();
       setDeleteConfirm(null);
+      showMessage(`${label} deleted successfully.`);
+    } catch (err) {
+      await loadAll();
+      const msg = err instanceof Error ? err.message : "Unable to delete";
+      setDeleteConfirm(null);
+      showMessage(msg, "error");
     }
   };
 
   const handlePayment = async () => {
+    if (!paymentForm.studentId) { showMessage("Please select a student.", "error"); return; }
+    if (!paymentForm.paidAmount || parseFloat(paymentForm.paidAmount) <= 0) { showMessage("Please enter a valid paid amount.", "error"); return; }
+    if (!paymentForm.paymentDate) { showMessage("Please select a payment date.", "error"); return; }
+    if (!paymentForm.paymentMode) { showMessage("Please select a payment mode.", "error"); return; }
     setSavingKey("payment");
     try {
       await saveEntity("/api/fees/payments", "POST", paymentForm);
@@ -430,6 +532,33 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     const finalAmount = parseFloat(payment.finalAmount) || 0;
     const paidAmount = parseFloat(payment.paidAmount) || 0;
     const balance = finalAmount - paidAmount;
+
+    // Build applicable discounts info for receipt
+    const activeDefaults = defaultDiscounts.filter((d) => d.active);
+    const studentSpecificDiscounts = studentDiscounts
+      .filter((sd) => sd.active && sd.studentId === payment.studentId)
+      .filter((sd) => sd.startDate <= payment.paymentDate && sd.endDate >= payment.paymentDate)
+      .map((sd) => {
+        const def = defaultDiscounts.find((d) => d.id === sd.discountId);
+        return def ? { ...def, startDate: sd.startDate, endDate: sd.endDate } : null;
+      })
+      .filter(Boolean) as (DefaultDiscount & { startDate: string; endDate: string })[];
+
+    const resolveApplicableLabel = (applicableOn: string) => {
+      if (applicableOn === "ALL") return "All Fee Types";
+      if (applicableOn === "TUITION") return feeTypes.find((t) => t.name.toLowerCase().includes("tuition") || t.name.toLowerCase().includes("tution"))?.name ?? "Tuition";
+      if (applicableOn === "TRANSPORT") return feeTypes.find((t) => t.name.toLowerCase().includes("transport"))?.name ?? "Transport";
+      return feeTypeMap.get(Number(applicableOn))?.name ?? applicableOn;
+    };
+
+    const discountLines = [
+      ...activeDefaults.map((d) =>
+        `<li>${d.name} — ${d.discountType === "PERCENTAGE" ? `${d.value}%` : `₹${d.value}`} on ${resolveApplicableLabel(d.applicableOn)}</li>`
+      ),
+      ...studentSpecificDiscounts.map((d) =>
+        `<li>${d.name} — ${d.discountType === "PERCENTAGE" ? `${d.value}%` : `₹${d.value}`} on ${resolveApplicableLabel(d.applicableOn)} <span style="color:#64748b;font-size:9px;">(Student-specific)</span></li>`
+      ),
+    ].join("");
 
     const detailRows = payment.details.map((detail, idx) => {
       const due = dueIdMap.get(detail.dueId);
@@ -583,12 +712,12 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       <span class="info-value">${student?.section ?? "—"}</span>
     </div>
     <div class="info-cell">
-      <span class="info-label">Admission No.</span>
-      <span class="info-value">${student?.admissionNumber ?? "—"}</span>
+      <span class="info-label">Roll No.</span>
+      <span class="info-value">${student?.rollNumber ?? "—"}</span>
     </div>
     <div class="info-cell">
-      <span class="info-label">Reg. No.</span>
-      <span class="info-value">${student?.registerNo ?? "—"}</span>
+      <span class="info-label">Admission No.</span>
+      <span class="info-value">${student?.admissionNumber ?? "—"}</span>
     </div>
     <div class="info-cell">
       <span class="info-label">Mobile</span>
@@ -633,6 +762,14 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       </tr>
     </tfoot>
   </table>
+
+  ${(totalDefaultDiscount > 0 || totalExtraDiscount > 0) && discountLines ? `
+  <!-- Discounts Applied -->
+  <div style="border:1px solid #bbf7d0;border-radius:4px;padding:6px 10px;margin-bottom:8px;background:#f0fdf4;font-size:10px;color:#14532d;">
+    <strong style="font-size:11px;">Discounts Applied:</strong>
+    <ul style="margin:3px 0 0 16px;padding:0;">${discountLines}</ul>
+  </div>
+  ` : ""}
 
   <!-- Amount in Words -->
   <div class="words-bar">
@@ -701,12 +838,34 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     receiptWindow.document.close();
   };
 
+  // Resolve grade name to all section classCodes, or all classCodes if empty
+  const resolveClassCodes = (gradeName: string): string[] => {
+    if (!gradeName) return classOptions.map((cls) => cls.classCode);
+    const sections = classOptions.filter((cls) => cls.name === gradeName);
+    return sections.length > 0 ? sections.map((s) => s.classCode) : [gradeName];
+  };
+
   const handleGenerateDues = async () => {
+    if (!generateForm.month) { showMessage("Please select a month.", "error"); return; }
+    if (!generateForm.academicYear) { showMessage("Please select an academic year.", "error"); return; }
     setSavingKey("generateDues");
     try {
-      await saveEntity("/api/fees/dues/generate", "POST", generateForm);
+      const classCodes = resolveClassCodes(generateForm.classCode);
+      for (const cc of classCodes) {
+        const response = await fetch(apiUrl("/api/fees/dues/generate"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(headers ?? {}) },
+          body: JSON.stringify({ ...generateForm, classCode: cc }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err?.error ?? `Unable to generate dues for ${cc}`);
+        }
+      }
+      await loadAll();
       showMessage("Dues generated successfully.");
     } catch (err) {
+      await loadAll();
       const msg = err instanceof Error ? err.message : "Unable to generate dues";
       showMessage(msg, "error");
     } finally {
@@ -715,7 +874,9 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   };
 
   const handleRegenerateDues = async () => {
-    const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    if (!generateForm.month) { showMessage("Please select a month.", "error"); return; }
+    if (!generateForm.academicYear) { showMessage("Please select an academic year.", "error"); return; }
+    const currentMonth = new Date().toISOString().slice(0, 7);
     if (generateForm.month && generateForm.month < currentMonth) {
       showMessage(
         `Regenerate is not allowed for past months (${generateForm.month}). Please select ${currentMonth} or a future month.`,
@@ -725,9 +886,22 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
     }
     setSavingKey("regenerateDues");
     try {
-      await saveEntity("/api/fees/dues/regenerate", "POST", generateForm);
+      const classCodes = resolveClassCodes(generateForm.classCode);
+      for (const cc of classCodes) {
+        const response = await fetch(apiUrl("/api/fees/dues/regenerate"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(headers ?? {}) },
+          body: JSON.stringify({ ...generateForm, classCode: cc }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err?.error ?? `Unable to regenerate dues for ${cc}`);
+        }
+      }
+      await loadAll();
       showMessage("Dues regenerated successfully (unpaid only).");
     } catch (err) {
+      await loadAll();
       const msg = err instanceof Error ? err.message : "Unable to regenerate dues";
       showMessage(msg, "error");
     } finally {
@@ -736,6 +910,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   };
 
   const handleSaveFeeType = async () => {
+    if (!feeTypeForm.name.trim()) { showMessage("Please enter a fee type name.", "error"); return; }
     setSavingKey("feeType");
     try {
       await saveEntity(
@@ -746,37 +921,160 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       setFeeTypeForm({ id: 0, name: "", active: true });
       showMessage(feeTypeForm.id ? "Fee type updated." : "Fee type saved.");
     } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save fee type.", "error");
+      let msg = err instanceof Error ? err.message : "Failed to save fee type.";
+      if (msg.includes("Duplicate entry")) {
+        msg = `A fee type named "${feeTypeForm.name}" already exists. Please use a different name.`;
+      }
+      showMessage(msg, "error");
     } finally {
       setSavingKey(null);
     }
   };
 
   const handleSaveFeeStructure = async () => {
+    if (!feeStructureForm.classCode) { showMessage("Please select a class.", "error"); return; }
+    if (!feeStructureForm.feeTypeId) { showMessage("Please select a fee type.", "error"); return; }
+    if (!feeStructureForm.amount || feeStructureForm.amount <= 0) { showMessage("Please enter a valid amount greater than 0.", "error"); return; }
+    if (!feeStructureForm.academicYear) { showMessage("Please select an academic year.", "error"); return; }
+    if (!feeStructureForm.effectiveFrom) { showMessage("Please select an effective from date.", "error"); return; }
+    if (!feeStructureForm.dueDay || feeStructureForm.dueDay < 1 || feeStructureForm.dueDay > 28) { showMessage("Please enter a due day between 1 and 28.", "error"); return; }
+
+    const gradeName = feeStructureForm.classCode;
+    const gradeSections = classOptions.filter((cls) => cls.name === gradeName);
+    const allClassCodes = gradeSections.length > 0 ? gradeSections.map((s) => s.classCode) : [gradeName];
+
     setSavingKey("feeStructure");
-    try {
-      await saveEntity(
-        feeStructureForm.id ? `/api/fees/structures/${feeStructureForm.id}` : "/api/fees/structures",
-        feeStructureForm.id ? "PUT" : "POST",
-        feeStructureForm as unknown as Record<string, unknown>
+
+    const postJson = async (url: string, method: "POST" | "PUT", body: Record<string, unknown>) => {
+      const res = await fetch(apiUrl(url), {
+        method,
+        headers: { "Content-Type": "application/json", ...(headers ?? {}) },
+        body: JSON.stringify(body),
+      });
+      return res.ok;
+    };
+
+    if (editingGroupIds.length > 0) {
+      // ── EDIT MODE ──────────────────────────────────────────────────────────
+      // The group was loaded when Edit was clicked. Update every structure in
+      // the group; also POST for any sections of this grade that weren't in the
+      // original group (e.g. a new section was added to the school later).
+      const existingInGroup = feeStructures.filter((s) => editingGroupIds.includes(s.id));
+      const existingCCs = existingInGroup.map((s) => s.classCode);
+      const missingSections = allClassCodes.filter((cc) => !existingCCs.includes(cc));
+
+      // Check that the missing sections don't already have a *different* structure
+      // for the same (feeType + academicYear) — if they do, skip them.
+      const conflicting = missingSections.filter((cc) =>
+        feeStructures.some(
+          (s) =>
+            s.classCode === cc &&
+            s.feeTypeId === feeStructureForm.feeTypeId &&
+            s.academicYear === feeStructureForm.academicYear &&
+            s.effectiveFrom === feeStructureForm.effectiveFrom &&
+            !editingGroupIds.includes(s.id)
+        )
       );
-      setFeeStructureForm({ id: 0, classCode: "", feeTypeId: 0, amount: 0, frequency: "MONTHLY", academicYear: "", effectiveFrom: "", dueDay: 1, active: true });
-      showMessage(feeStructureForm.id ? "Fee structure updated." : "Fee structure saved.");
-    } catch (err) {
-      showMessage(err instanceof Error ? err.message : "Failed to save fee structure.", "error");
-    } finally {
-      setSavingKey(null);
+      const toCreate = missingSections.filter((cc) => !conflicting.includes(cc));
+
+      const results: { classCode: string; ok: boolean }[] = [];
+
+      for (const s of existingInGroup) {
+        const ok = await postJson(`/api/fees/structures/${s.id}`, "PUT", {
+          ...feeStructureForm,
+          classCode: s.classCode,
+          id: s.id,
+        } as unknown as Record<string, unknown>);
+        results.push({ classCode: s.classCode, ok });
+      }
+      for (const cc of toCreate) {
+        const ok = await postJson("/api/fees/structures", "POST", {
+          ...feeStructureForm,
+          classCode: cc,
+          id: 0,
+        } as unknown as Record<string, unknown>);
+        results.push({ classCode: cc, ok });
+      }
+
+      await loadAll();
+
+      const failedCCs = results.filter((r) => !r.ok).map((r) => r.classCode);
+      const parts: string[] = [];
+      if (failedCCs.length === 0) parts.push(`Updated all sections of Class ${gradeName}.`);
+      else parts.push(`Updated most sections. Failed for: ${failedCCs.join(", ")}.`);
+      if (conflicting.length) parts.push(`Skipped: ${conflicting.join(", ")} already have a different structure.`);
+
+      showMessage(parts.join(" "), failedCCs.length > 0 || conflicting.length > 0 ? "error" : "success");
+      if (failedCCs.length === 0) resetFeeStructureForm();
+
+    } else {
+      // ── CREATE MODE ────────────────────────────────────────────────────────
+      // Before hitting the API, check the local feeStructures state for
+      // (classCode + feeTypeId + academicYear + effectiveFrom) conflicts.
+      const conflicting = allClassCodes.filter((cc) =>
+        feeStructures.some(
+          (s) =>
+            s.classCode === cc &&
+            s.feeTypeId === feeStructureForm.feeTypeId &&
+            s.academicYear === feeStructureForm.academicYear &&
+            s.effectiveFrom === feeStructureForm.effectiveFrom
+        )
+      );
+
+      if (conflicting.length === allClassCodes.length) {
+        showMessage(
+          `A fee structure for Class ${gradeName} with this fee type, academic year, and effective date already exists. Click Edit on a row to update it.`,
+          "error"
+        );
+        setSavingKey(null);
+        return;
+      }
+
+      const toCreate = allClassCodes.filter((cc) => !conflicting.includes(cc));
+      const results: { classCode: string; ok: boolean }[] = [];
+
+      for (const cc of toCreate) {
+        const ok = await postJson("/api/fees/structures", "POST", {
+          ...feeStructureForm,
+          classCode: cc,
+        } as unknown as Record<string, unknown>);
+        results.push({ classCode: cc, ok });
+      }
+
+      await loadAll();
+
+      const saved = results.filter((r) => r.ok).map((r) => r.classCode);
+      const failed = results.filter((r) => !r.ok).map((r) => r.classCode);
+      const parts: string[] = [];
+      if (saved.length) parts.push(`Saved for: ${saved.join(", ")}.`);
+      if (conflicting.length) parts.push(`Already exists for: ${conflicting.join(", ")} — click Edit to update.`);
+      if (failed.length) parts.push(`Failed for: ${failed.join(", ")}.`);
+
+      showMessage(parts.join(" "), conflicting.length > 0 || failed.length > 0 ? "error" : "success");
+      if (conflicting.length === 0 && failed.length === 0) resetFeeStructureForm();
     }
+
+    setSavingKey(null);
   };
 
   const handleSaveDefaultDiscount = async () => {
+    if (!defaultDiscountForm.name.trim()) { showMessage("Please enter a discount name.", "error"); return; }
+    if (!defaultDiscountForm.value || parseFloat(defaultDiscountForm.value) <= 0) { showMessage("Please enter a valid value.", "error"); return; }
+    if (!defaultDiscountForm.applicableOn) { showMessage("Please select applicable on.", "error"); return; }
     setSavingKey("defaultDiscount");
     try {
-      await saveEntity(
-        defaultDiscountForm.id ? `/api/fees/discounts/default/${defaultDiscountForm.id}` : "/api/fees/discounts/default",
-        defaultDiscountForm.id ? "PUT" : "POST",
-        defaultDiscountForm as unknown as Record<string, unknown>
-      );
+      const url = defaultDiscountForm.id ? `/api/fees/discounts/default/${defaultDiscountForm.id}` : "/api/fees/discounts/default";
+      const method = defaultDiscountForm.id ? "PUT" : "POST";
+      const response = await fetch(apiUrl(url), {
+        method,
+        headers: { "Content-Type": "application/json", ...(headers ?? {}) },
+        body: JSON.stringify(defaultDiscountForm),
+      });
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody?.error ?? errBody?.message ?? `Server error: ${response.status}`);
+      }
+      await loadAll();
       setDefaultDiscountForm({ id: 0, name: "", discountType: "PERCENTAGE", value: "", applicableOn: "ALL", active: true });
       showMessage(defaultDiscountForm.id ? "Discount updated." : "Discount saved.");
     } catch (err) {
@@ -787,6 +1085,10 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   };
 
   const handleSaveStudentDiscount = async () => {
+    if (!studentDiscountForm.studentId) { showMessage("Please select a student.", "error"); return; }
+    if (!studentDiscountForm.discountId) { showMessage("Please select a discount.", "error"); return; }
+    if (!studentDiscountForm.startDate) { showMessage("Please select a start date.", "error"); return; }
+    if (!studentDiscountForm.endDate) { showMessage("Please select an end date.", "error"); return; }
     setSavingKey("studentDiscount");
     try {
       await saveEntity(
@@ -804,6 +1106,9 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   };
 
   const handleSaveFineRule = async () => {
+    if (fineRuleForm.daysFrom < 0) { showMessage("Please enter a valid 'From' day.", "error"); return; }
+    if (fineRuleForm.daysTo <= 0) { showMessage("Please enter a valid 'To' day.", "error"); return; }
+    if (!fineRuleForm.value || parseFloat(fineRuleForm.value) <= 0) { showMessage("Please enter a valid fine amount.", "error"); return; }
     setSavingKey("fineRule");
     try {
       await saveEntity(
@@ -823,6 +1128,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   const filteredDues = useMemo(() => {
     setDuesPage(1);
     const nameLower = dueFilters.name.trim().toLowerCase();
+    const rollFilter = dueFilters.rollNumber.trim();
     // Scope dues to students visible in the top-level class filter
     const visibleStudentIds = new Set(students.map((s) => s.id));
     return feeDues.filter((due) => {
@@ -832,6 +1138,10 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       if (nameLower) {
         const studentName = (studentMap.get(due.studentId)?.name ?? "").toLowerCase();
         if (!studentName.includes(nameLower)) return false;
+      }
+      if (rollFilter) {
+        const studentRoll = studentMap.get(due.studentId)?.rollNumber ?? "";
+        if (!studentRoll.includes(rollFilter)) return false;
       }
       if (dueFilters.month) {
         if (!due.dueDate.startsWith(dueFilters.month)) return false;
@@ -843,6 +1153,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
   const filteredPayments = useMemo(() => {
     setPaymentsPage(1);
     const nameLower = paymentFilters.name.trim().toLowerCase();
+    const rollFilter = paymentFilters.rollNumber.trim();
     // Scope payments to students visible in the top-level class filter
     const visibleStudentIds = new Set(students.map((s) => s.id));
     return payments.filter((payment) => {
@@ -850,6 +1161,10 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       if (nameLower) {
         const studentName = (studentMap.get(payment.studentId)?.name ?? "").toLowerCase();
         if (!studentName.includes(nameLower)) return false;
+      }
+      if (rollFilter) {
+        const studentRoll = studentMap.get(payment.studentId)?.rollNumber ?? "";
+        if (!studentRoll.includes(rollFilter)) return false;
       }
       if (paymentFilters.month) {
         if (!payment.paymentDate.startsWith(paymentFilters.month)) return false;
@@ -889,6 +1204,48 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
       .reduce((sum, due) => sum + parseFloat(due.remainingAmount || "0"), 0)
       .toFixed(2);
   }, [studentPendingDues]);
+
+  // Compute net amount after applicable discounts (mirrors backend logic)
+  const studentNetAfterDiscount = useMemo(() => {
+    if (!paymentForm.studentId || studentPendingDues.length === 0) return studentTotalRemaining;
+    const today = paymentForm.paymentDate || new Date().toISOString().slice(0, 10);
+    const activeDefaults = defaultDiscounts.filter((d) => d.active);
+    const studentSpecific = studentDiscounts
+      .filter((sd) => sd.active && sd.studentId === paymentForm.studentId && sd.startDate <= today && sd.endDate >= today)
+      .map((sd) => defaultDiscounts.find((d) => d.id === sd.discountId))
+      .filter(Boolean) as DefaultDiscount[];
+
+    let totalNet = 0;
+    for (const due of studentPendingDues) {
+      const remaining = parseFloat(due.remainingAmount || "0");
+      let discount = 0;
+      const isApplicable = (applicableOn: string) => {
+        if (applicableOn === "ALL") return true;
+        if (applicableOn === "TUITION") return (feeTypeMap.get(due.feeTypeId)?.name ?? "").toLowerCase().includes("tuition") || (feeTypeMap.get(due.feeTypeId)?.name ?? "").toLowerCase().includes("tution");
+        if (applicableOn === "TRANSPORT") return (feeTypeMap.get(due.feeTypeId)?.name ?? "").toLowerCase().includes("transport");
+        return Number(applicableOn) === due.feeTypeId;
+      };
+      for (const def of activeDefaults) {
+        if (!isApplicable(def.applicableOn)) continue;
+        if (def.discountType === "PERCENTAGE") {
+          discount += remaining * parseFloat(def.value) / 100;
+        } else {
+          discount += parseFloat(def.value);
+        }
+      }
+      for (const def of studentSpecific) {
+        if (!isApplicable(def.applicableOn)) continue;
+        if (def.discountType === "PERCENTAGE") {
+          discount += remaining * parseFloat(def.value) / 100;
+        } else {
+          discount += parseFloat(def.value);
+        }
+      }
+      discount = Math.min(discount, remaining);
+      totalNet += remaining - discount;
+    }
+    return totalNet.toFixed(2);
+  }, [studentPendingDues, defaultDiscounts, studentDiscounts, paymentForm.studentId, paymentForm.paymentDate, feeTypeMap, studentTotalRemaining]);
 
   // Group pending dues by calendar month, sorted chronologically
   const duesByMonth = useMemo(() => {
@@ -956,7 +1313,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               <div className={styles.sectionTitle}>Fee Types</div>
               <div className={styles.fieldRow}>
                 <label className={styles.label}>
-                  Name
+                  Name <span style={{ color: "#dc2626" }}>*</span>
                   <input
                     className={styles.input}
                     value={feeTypeForm.name}
@@ -966,7 +1323,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                   />
                 </label>
                 <label className={styles.label}>
-                  Active
+                  Active <span style={{ color: "#dc2626" }}>*</span>
                   <select
                     className={styles.input}
                     value={feeTypeForm.active ? "Yes" : "No"}
@@ -1036,27 +1393,33 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           <div className={styles.sectionTitle}>Fee Structure</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Class
-              <select
-                className={styles.input}
-                value={feeStructureForm.classCode}
-                onChange={(event) =>
-                  setFeeStructureForm({ ...feeStructureForm, classCode: event.target.value })
-                }
-              >
-                <option value="">Select</option>
-                {classOptions.map((cls) => (
-                  <option key={cls.classCode} value={cls.classCode}>
-                    {cls.classCode}
-                  </option>
-                ))}
-              </select>
+              Class <span style={{ color: "#dc2626" }}>*</span>
+              {(() => {
+                const classOpts = editingGroupIds.length > 0
+                  ? [{ value: feeStructureForm.classCode, label: `Class ${feeStructureForm.classCode}` }]
+                  : uniqueGrades.map((cls) => ({ value: cls.name, label: `Class ${cls.name}` }));
+                return (
+                  <select
+                    className={styles.input}
+                    value={feeStructureForm.classCode}
+                    disabled={editingGroupIds.length > 0}
+                    onChange={(event) =>
+                      setFeeStructureForm({ ...feeStructureForm, classCode: event.target.value })
+                    }
+                  >
+                    {[{ value: "", label: "Select" }, ...classOpts].map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                );
+              })()}
             </label>
             <label className={styles.label}>
-              Fee Type
+              Fee Type <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={feeStructureForm.feeTypeId || ""}
+                disabled={editingGroupIds.length > 0}
                 onChange={(event) =>
                   setFeeStructureForm({
                     ...feeStructureForm,
@@ -1073,11 +1436,12 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
             <label className={styles.label}>
-              Amount
+              Amount <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
-                value={feeStructureForm.amount}
+                placeholder="Enter amount"
+                value={feeStructureForm.amount || ""}
                 onChange={(event) =>
                   setFeeStructureForm({ ...feeStructureForm, amount: Number(event.target.value) })
                 }
@@ -1086,7 +1450,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           </div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Frequency
+              Frequency <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={feeStructureForm.frequency}
@@ -1103,10 +1467,11 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
             <label className={styles.label}>
-              Academic Year
+              Academic Year <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={feeStructureForm.academicYear}
+                disabled={editingGroupIds.length > 0}
                 onChange={(event) =>
                   setFeeStructureForm({
                     ...feeStructureForm,
@@ -1121,7 +1486,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
             <label className={styles.label}>
-              Effective From
+              Effective From <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -1135,7 +1500,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Due Day (1-28)
+              Due Day (1-28) <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -1151,7 +1516,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Active
+              Active <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={feeStructureForm.active ? "Yes" : "No"}
@@ -1175,9 +1540,26 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               onClick={handleSaveFeeStructure}
             >
               {savingKey === "feeStructure"
-                ? feeStructureForm.id ? "Updating…" : "Saving…"
-                : feeStructureForm.id ? "Update Structure" : "Save Structure"}
+                ? editingGroupIds.length > 0 ? "Updating…" : "Saving…"
+                : editingGroupIds.length > 0 ? "Update Structure" : "Save Structure"}
             </button>
+            {editingGroupIds.length > 0 && (
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={resetFeeStructureForm}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          <div style={{ background: "#f0f4ff", border: "1px solid #c5d1f5", borderRadius: 6, padding: "10px 14px", margin: "10px 0", fontSize: 13, color: "#334", lineHeight: 1.6 }}>
+            <strong>Frequency guide:</strong>
+            <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+              <li><b>Monthly</b> — Dues generated every month when the effective date is on or before the selected month.</li>
+              <li><b>Yearly</b> — Dues generated once per year in the month of the effective date (e.g., effective April 2026 → due every April).</li>
+              <li><b>One Time</b> — Dues generated only once, fixed to the effective date. Will not repeat in any subsequent month.</li>
+            </ul>
           </div>
           <div className={styles.tableResponsive}>
             <table className={styles.table}>
@@ -1196,43 +1578,50 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 </tr>
               </thead>
               <tbody>
-                {feeStructures.map((structure, index) => (
-                  <tr key={structure.id}>
+                {groupedFeeStructures.map((group, index) => (
+                  <tr
+                    key={group.key}
+                    style={group.memberIds.some((id) => editingGroupIds.includes(id)) ? { background: "#f0f9f0" } : undefined}
+                  >
                     <td>{index + 1}</td>
-                    <td>{structure.classCode}</td>
-                    <td>{feeTypeMap.get(structure.feeTypeId)?.name ?? "-"}</td>
-                    <td>{structure.amount}</td>
-                    <td>{structure.frequency}</td>
-                    <td>{structure.academicYear}</td>
-                    <td>{structure.effectiveFrom}</td>
-                    <td>
-                      {(structure as unknown as { dueDay?: number; due_day?: number }).dueDay ??
-                        (structure as unknown as { dueDay?: number; due_day?: number }).due_day ??
-                        "-"}
-                    </td>
-                    <td>{structure.active ? "Active" : "Inactive"}</td>
+                    <td>Class {group.gradeName}</td>
+                    <td>{feeTypeMap.get(group.feeTypeId)?.name ?? "-"}</td>
+                    <td>{group.amount}{group.inconsistent ? " *" : ""}</td>
+                    <td>{group.frequency}</td>
+                    <td>{group.academicYear}</td>
+                    <td>{group.effectiveFrom}</td>
+                    <td>{group.dueDay || "-"}</td>
+                    <td>{group.active ? "Active" : "Inactive"}</td>
                     <td>
                       <button
                         className={styles.inlineButton}
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          setEditingGroupIds(group.memberIds);
                           setFeeStructureForm({
-                            ...structure,
-                            dueDay:
-                              (structure as unknown as { dueDay?: number; due_day?: number })
-                                .dueDay ??
-                              (structure as unknown as { dueDay?: number; due_day?: number })
-                                .due_day ??
-                              1,
-                          })
-                        }
+                            id: group.memberIds[0],
+                            classCode: group.gradeName,
+                            feeTypeId: group.feeTypeId,
+                            amount: group.amount,
+                            frequency: group.frequency,
+                            academicYear: group.academicYear,
+                            effectiveFrom: group.effectiveFrom,
+                            dueDay: group.dueDay,
+                            active: group.active,
+                          });
+                        }}
                       >
                         Edit
                       </button>
                       <button
                         className={styles.inlineButton}
                         type="button"
-                        onClick={() => confirmDelete(`/api/fees/structures/${structure.id}`, `Fee structure for class "${structure.classCode}"`)}
+                        onClick={() =>
+                          confirmDelete(
+                            group.memberIds.map((id) => `/api/fees/structures/${id}`),
+                            `Fee structure for Class "${group.gradeName}"`
+                          )
+                        }
                       >
                         Delete
                       </button>
@@ -1250,7 +1639,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           <div className={styles.sectionTitle}>Generate Dues</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Class
+              Class <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={generateForm.classCode}
@@ -1259,15 +1648,15 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 }
               >
                 <option value="">All Classes</option>
-                {classOptions.map((cls) => (
-                  <option key={cls.classCode} value={cls.classCode}>
-                    {cls.classCode}
+                {uniqueGrades.map((cls) => (
+                  <option key={cls.name} value={cls.name}>
+                    Class {cls.name}
                   </option>
                 ))}
               </select>
             </label>
             <label className={styles.label}>
-              Month
+              Month <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="month"
@@ -1278,7 +1667,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Academic Year
+              Academic Year <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={generateForm.academicYear}
@@ -1312,6 +1701,53 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             </button>
           </div>
 
+          {/* Info: which fee structures will apply for the selected class + month */}
+          {generateForm.month && (() => {
+            const monthStart = generateForm.month + "-01";
+            const selectedGrade = generateForm.classCode;
+            // Resolve grade to classCodes
+            const targetCodes = selectedGrade
+              ? classOptions.filter((c) => c.name === selectedGrade).map((c) => c.classCode)
+              : classOptions.map((c) => c.classCode);
+            // Gather all active structures matching the target classCodes + optional academic year
+            const candidates = feeStructures.filter((s) => {
+              if (!targetCodes.includes(s.classCode)) return false;
+              if (!s.active) return false;
+              if (generateForm.academicYear && s.academicYear !== generateForm.academicYear) return false;
+              return true;
+            });
+            // For each feeTypeId, pick latest effectiveFrom ≤ monthStart
+            const best = new Map<number, typeof candidates[0]>();
+            for (const s of candidates) {
+              if (!s.effectiveFrom || s.effectiveFrom > monthStart) continue;
+              const cur = best.get(s.feeTypeId);
+              if (!cur || s.effectiveFrom > cur.effectiveFrom) best.set(s.feeTypeId, s);
+            }
+            const applicable = Array.from(best.values());
+            if (applicable.length === 0 && targetCodes.length > 0) {
+              return (
+                <div style={{ margin: "10px 0", padding: "10px 14px", background: "#fef3c7", borderRadius: 8, fontSize: 13, color: "#92400e" }}>
+                  No active fee structures found for {selectedGrade ? `Class ${selectedGrade}` : "any class"} effective on or before {monthStart}.
+                </div>
+              );
+            }
+            if (applicable.length > 0) {
+              return (
+                <div style={{ margin: "10px 0", padding: "10px 14px", background: "#eff6ff", borderRadius: 8, fontSize: 13, color: "#1e40af" }}>
+                  <strong>Applicable fee structures for {generateForm.month}:</strong>
+                  <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                    {applicable.map((s) => (
+                      <li key={s.feeTypeId}>
+                        {feeTypeMap.get(s.feeTypeId)?.name ?? `Type #${s.feeTypeId}`} — Amount: {s.amount}, Due Day: {(s as unknown as { dueDay?: number; due_day?: number }).dueDay ?? (s as unknown as { dueDay?: number; due_day?: number }).due_day ?? "-"}, Effective: {s.effectiveFrom}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           <div className={styles.tableSectionHeader}>
             <div className={styles.sectionTitle} style={{ borderBottom: "none", margin: 0, padding: 0 }}>Dues</div>
           </div>
@@ -1324,6 +1760,16 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 placeholder="Type student name…"
                 value={dueFilters.name}
                 onChange={(e) => setDueFilters({ ...dueFilters, name: e.target.value })}
+              />
+            </label>
+            <label className={styles.label}>
+              Filter by Roll No
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Roll number…"
+                value={dueFilters.rollNumber}
+                onChange={(e) => setDueFilters({ ...dueFilters, rollNumber: e.target.value })}
               />
             </label>
             <label className={styles.label}>
@@ -1348,11 +1794,11 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 <option value="PAID">Paid</option>
               </select>
             </label>
-            {(dueFilters.name || dueFilters.month || dueFilters.status !== "all") && (
+            {(dueFilters.name || dueFilters.rollNumber || dueFilters.month || dueFilters.status !== "all") && (
               <button
                 className={styles.buttonSecondary}
                 type="button"
-                onClick={() => setDueFilters({ studentId: "", status: "all", name: "", month: "" })}
+                onClick={() => setDueFilters({ studentId: "", status: "all", name: "", month: "", rollNumber: "" })}
                 style={{ alignSelf: "flex-start" }}
               >
                 Clear Filters
@@ -1368,7 +1814,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Roll No</th>
                   <th>Student</th>
                   <th>Fee Type</th>
                   <th>Amount</th>
@@ -1381,13 +1827,13 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 {duesPageSlice.length === 0 ? (
                   <tr><td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: "24px" }}>No dues found.</td></tr>
                 ) : (
-                  duesPageSlice.map((due, index) => (
+                  duesPageSlice.map((due) => {
+                    const s = studentMap.get(due.studentId);
+                    return (
                     <tr key={due.id}>
-                      <td>{(duesPage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td>{s?.rollNumber ?? "—"}</td>
                       <td>
-                        {(() => {
-                          const s = studentMap.get(due.studentId);
-                          return s ? (
+                        {s ? (
                             <button
                               type="button"
                               className={styles.rowClickable}
@@ -1395,8 +1841,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                             >
                               {s.name}
                             </button>
-                          ) : (due.studentId);
-                        })()}
+                          ) : (due.studentId)}
                       </td>
                       <td>{feeTypeMap.get(due.feeTypeId)?.name ?? "-"}</td>
                       <td>₹ {parseFloat(due.amount).toFixed(2)}</td>
@@ -1412,7 +1857,8 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                         </span>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1470,7 +1916,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           {/* Row 1: Class filter + Student picker */}
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Class
+              Class <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={paymentClassFilter}
@@ -1488,7 +1934,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
             <label className={styles.label}>
-              Student
+              Student <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={paymentForm.studentId}
@@ -1502,7 +1948,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                   : (feeStudents.length ? feeStudents : students)
                 ).map((student) => (
                   <option key={student.id} value={student.id}>
-                    {student.name} ({student.classCode})
+                    {student.name} (Roll: {student.rollNumber})
                   </option>
                 ))}
               </select>
@@ -1522,11 +1968,16 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                   <div>
                     <div className={styles.dueSummaryLabel}>Total Outstanding</div>
                     <div className={styles.dueSummaryTotal}>₹ {studentTotalRemaining}</div>
+                    {studentNetAfterDiscount !== studentTotalRemaining && (
+                      <div style={{ fontSize: 12, color: "#166534", marginTop: 2 }}>
+                        After discount: <strong>₹ {studentNetAfterDiscount}</strong>
+                      </div>
+                    )}
                   </div>
                   <button
                     className={styles.payAllButton}
                     type="button"
-                    onClick={() => setPaymentForm({ ...paymentForm, paidAmount: studentTotalRemaining })}
+                    onClick={() => setPaymentForm({ ...paymentForm, paidAmount: studentNetAfterDiscount })}
                   >
                     Pay All
                   </button>
@@ -1542,6 +1993,28 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                     }, 0)
                     .toFixed(2);
                   const hasPartial = group.dues.some((d) => d.status === "PARTIAL");
+                  // Compute month net after discounts
+                  const today = paymentForm.paymentDate || new Date().toISOString().slice(0, 10);
+                  const activeDeftsLocal = defaultDiscounts.filter((dd) => dd.active);
+                  const stuSpecLocal = studentDiscounts
+                    .filter((sd) => sd.active && sd.studentId === paymentForm.studentId && sd.startDate <= today && sd.endDate >= today)
+                    .map((sd) => defaultDiscounts.find((dd) => dd.id === sd.discountId))
+                    .filter(Boolean) as DefaultDiscount[];
+                  let monthNet = 0;
+                  for (const d of group.dues) {
+                    const rem = parseFloat(d.remainingAmount || "0");
+                    let disc = 0;
+                    const isApp = (ao: string) => {
+                      if (ao === "ALL") return true;
+                      if (ao === "TUITION") return (feeTypeMap.get(d.feeTypeId)?.name ?? "").toLowerCase().includes("tuition") || (feeTypeMap.get(d.feeTypeId)?.name ?? "").toLowerCase().includes("tution");
+                      if (ao === "TRANSPORT") return (feeTypeMap.get(d.feeTypeId)?.name ?? "").toLowerCase().includes("transport");
+                      return Number(ao) === d.feeTypeId;
+                    };
+                    for (const df of activeDeftsLocal) { if (!isApp(df.applicableOn)) continue; disc += df.discountType === "PERCENTAGE" ? rem * parseFloat(df.value) / 100 : parseFloat(df.value); }
+                    for (const df of stuSpecLocal) { if (!isApp(df.applicableOn)) continue; disc += df.discountType === "PERCENTAGE" ? rem * parseFloat(df.value) / 100 : parseFloat(df.value); }
+                    monthNet += rem - Math.min(disc, rem);
+                  }
+                  const monthNetStr = monthNet.toFixed(2);
                   return (
                   <div key={group.label} className={styles.monthGroup}>
                     <div className={styles.monthGroupHeader}>
@@ -1555,13 +2028,13 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                       </div>
                       <div className={styles.monthGroupActions}>
                         <span className={styles.monthGroupTotal}>
-                          ₹ {group.monthTotal}
+                          ₹ {monthNetStr !== group.monthTotal ? monthNetStr : group.monthTotal}
                           <span className={styles.monthGroupTotalLabel}> remaining</span>
                         </span>
                         <button
                           className={styles.payMonthButton}
                           type="button"
-                          onClick={() => setPaymentForm({ ...paymentForm, paidAmount: group.monthTotal })}
+                          onClick={() => setPaymentForm({ ...paymentForm, paidAmount: monthNetStr })}
                         >
                           Pay remaining
                         </button>
@@ -1619,10 +2092,74 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             )
           ) : null}
 
+          {/* Applicable discounts info */}
+          {paymentForm.studentId && studentPendingDues.length > 0 && (() => {
+            const activeDefaults = defaultDiscounts.filter((d) => d.active);
+            const studentSpecific = studentDiscounts.filter(
+              (sd) => sd.active && sd.studentId === paymentForm.studentId
+            );
+            const today = new Date().toISOString().slice(0, 10);
+            const applicableStudentDiscounts = studentSpecific
+              .filter((sd) => sd.startDate <= today && sd.endDate >= today)
+              .map((sd) => {
+                const def = defaultDiscounts.find((d) => d.id === sd.discountId);
+                return def ? { ...def, studentSpecific: true, startDate: sd.startDate, endDate: sd.endDate } : null;
+              })
+              .filter(Boolean) as (DefaultDiscount & { studentSpecific: boolean; startDate: string; endDate: string })[];
+
+            if (activeDefaults.length === 0 && applicableStudentDiscounts.length === 0) return null;
+
+            return (
+              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "10px 14px", margin: "10px 0", fontSize: 13, color: "#14532d", lineHeight: 1.6 }}>
+                <strong>Applicable discounts:</strong>
+                <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                  {activeDefaults.map((d) => (
+                    <li key={`def-${d.id}`}>
+                      {d.name} — {d.discountType === "PERCENTAGE" ? `${d.value}%` : `₹${d.value}`} on {d.applicableOn === "ALL" ? "All Fee Types" : (feeTypeMap.get(Number(d.applicableOn))?.name ?? d.applicableOn)}
+                    </li>
+                  ))}
+                  {applicableStudentDiscounts.map((d) => (
+                    <li key={`stu-${d.id}`}>
+                      {d.name} — {d.discountType === "PERCENTAGE" ? `${d.value}%` : `₹${d.value}`} on {d.applicableOn === "ALL" ? "All Fee Types" : (feeTypeMap.get(Number(d.applicableOn))?.name ?? d.applicableOn)} <span style={{ color: "#64748b", fontSize: 11 }}>(Student-specific, {d.startDate} to {d.endDate})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
+          {/* How Payments Work info toggle */}
+          <div style={{ margin: "10px 0" }}>
+            <button
+              type="button"
+              onClick={() => setShowPaymentInfo(!showPaymentInfo)}
+              style={{ background: "none", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 14px", fontSize: 13, color: "#334155", cursor: "pointer" }}
+            >
+              {showPaymentInfo ? "Hide" : "How Payments Work"} <span style={{ fontSize: 11 }}>{showPaymentInfo ? "▲" : "▼"}</span>
+            </button>
+            {showPaymentInfo && (
+              <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, padding: "12px 16px", marginTop: 8, fontSize: 13, color: "#0c4a6e", lineHeight: 1.7 }}>
+                <strong>Payment Allocation</strong>
+                <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                  <li>Payments are automatically allocated to the <strong>oldest unpaid dues first</strong> (earliest due date).</li>
+                  <li>If the paid amount is less than the oldest due, that due becomes <strong>PARTIAL</strong> and the remaining dues stay UNPAID.</li>
+                  <li>If the paid amount covers the oldest due fully, it moves to the next due, and so on until the amount is exhausted.</li>
+                  <li>You cannot select a specific fee type to pay — the system always settles dues in chronological order.</li>
+                </ul>
+                <strong style={{ marginTop: 8, display: "inline-block" }}>Discounts &amp; Fines</strong>
+                <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                  <li>Active discounts (global + student-specific) are applied automatically on each due before allocating payment.</li>
+                  <li>Late payment fines are calculated based on the number of days past the due date and added to the due amount.</li>
+                  <li>Extra discount (one-time) can be entered manually in the field below and is applied across dues until exhausted.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+
           {/* Row 2: Amount, date, mode */}
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Paid Amount
+              Paid Amount <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -1634,7 +2171,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Payment Date
+              Payment Date <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -1645,7 +2182,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Mode
+              Mode <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={paymentForm.paymentMode}
@@ -1723,6 +2260,16 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
+              Filter by Roll No
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Roll number…"
+                value={paymentFilters.rollNumber}
+                onChange={(e) => setPaymentFilters({ ...paymentFilters, rollNumber: e.target.value })}
+              />
+            </label>
+            <label className={styles.label}>
               Filter by Month
               <input
                 className={styles.input}
@@ -1731,11 +2278,11 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 onChange={(e) => setPaymentFilters({ ...paymentFilters, month: e.target.value })}
               />
             </label>
-            {(paymentFilters.name || paymentFilters.month) && (
+            {(paymentFilters.name || paymentFilters.rollNumber || paymentFilters.month) && (
               <button
                 className={styles.buttonSecondary}
                 type="button"
-                onClick={() => setPaymentFilters({ name: "", month: "" })}
+                onClick={() => setPaymentFilters({ name: "", month: "", rollNumber: "" })}
                 style={{ alignSelf: "flex-start" }}
               >
                 Clear Filters
@@ -1752,7 +2299,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Roll No</th>
                   <th>Student</th>
                   <th>Paid</th>
                   <th>Final</th>
@@ -1773,13 +2320,13 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                     </td>
                   </tr>
                 ) : (
-                  paymentsPageSlice.map((payment, index) => (
+                  paymentsPageSlice.map((payment) => {
+                    const s = studentMap.get(payment.studentId);
+                    return (
                     <tr key={payment.id}>
-                      <td>{(paymentsPage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td>{s?.rollNumber ?? "—"}</td>
                       <td>
-                        {(() => {
-                          const s = studentMap.get(payment.studentId);
-                          return s ? (
+                        {s ? (
                             <button
                               type="button"
                               className={styles.rowClickable}
@@ -1787,8 +2334,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                             >
                               {s.name}
                             </button>
-                          ) : (payment.studentId);
-                        })()}
+                          ) : (payment.studentId)}
                       </td>
                       <td>₹ {parseFloat(payment.paidAmount).toFixed(2)}</td>
                       <td>₹ {parseFloat(payment.finalAmount).toFixed(2)}</td>
@@ -1808,7 +2354,8 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                         </button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1861,10 +2408,42 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
 
       {activeTab === "Discounts & Fines" ? (
         <div className={styles.sectionCard}>
-          <div className={styles.sectionTitle}>Default Discounts</div>
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setShowDiscountInfo(!showDiscountInfo)}
+              style={{
+                background: "none",
+                border: "1px solid #c5d1f5",
+                borderRadius: 6,
+                padding: "6px 14px",
+                fontSize: 13,
+                color: "#3b5bdb",
+                cursor: "pointer",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              {showDiscountInfo ? "Hide" : "Understand Discounts"} <span style={{ fontSize: 11 }}>{showDiscountInfo ? "▲" : "▼"}</span>
+            </button>
+            {showDiscountInfo && (
+              <div style={{ background: "#f0f4ff", border: "1px solid #c5d1f5", borderRadius: 6, padding: "10px 14px", marginTop: 8, fontSize: 13, color: "#334", lineHeight: 1.7 }}>
+                <strong>How discounts work:</strong>
+                <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                  <li><b>Discounts Type (Global)</b> — These apply <b>automatically to all students</b> when recording a payment. Set the fee type it applies to, type (percentage or fixed), and value.</li>
+                  <li><b>Student Discounts (Student-Specific)</b> — Assign an existing discount to a <b>specific student</b> for a date range. The discount only applies if the payment date falls within the start/end dates.</li>
+                  <li><b>Stacking</b> — Both global and student-specific discounts are applied together. The total discount is capped at the due amount.</li>
+                  <li><b>Tip</b> — To create a discount only for specific students, set Active to <b>No</b> in Discounts Type (so it won&#39;t apply globally), then assign it to individual students via Student Discounts.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+          <div className={styles.sectionTitle}>Discounts Type</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Name
+              Name <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 value={defaultDiscountForm.name}
@@ -1874,7 +2453,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Type
+              Type <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={defaultDiscountForm.discountType}
@@ -1890,7 +2469,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
             <label className={styles.label}>
-              Value
+              Value <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -1903,24 +2482,25 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           </div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Applicable On
+              Applicable On <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={defaultDiscountForm.applicableOn}
                 onChange={(event) =>
                   setDefaultDiscountForm({
                     ...defaultDiscountForm,
-                    applicableOn: event.target.value as DefaultDiscount["applicableOn"],
+                    applicableOn: event.target.value,
                   })
                 }
               >
-                <option value="ALL">All</option>
-                <option value="TUITION">Tuition</option>
-                <option value="TRANSPORT">Transport</option>
+                <option value="ALL">All Fee Types</option>
+                {feeTypes.filter((t) => t.active).map((t) => (
+                  <option key={t.id} value={String(t.id)}>{t.name}</option>
+                ))}
               </select>
             </label>
             <label className={styles.label}>
-              Active
+              Active <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={defaultDiscountForm.active ? "Yes" : "No"}
@@ -1969,13 +2549,29 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                     <td>{discount.name}</td>
                     <td>{discount.discountType}</td>
                     <td>{discount.value}</td>
-                    <td>{discount.applicableOn}</td>
+                    <td>{
+                      discount.applicableOn === "ALL" ? "All Fee Types"
+                      : discount.applicableOn === "TUITION" ? (feeTypes.find((t) => t.name.toLowerCase().includes("tuition") || t.name.toLowerCase().includes("tution"))?.name ?? "Tuition")
+                      : discount.applicableOn === "TRANSPORT" ? (feeTypes.find((t) => t.name.toLowerCase().includes("transport"))?.name ?? "Transport")
+                      : (feeTypeMap.get(Number(discount.applicableOn))?.name ?? discount.applicableOn)
+                    }</td>
                     <td>{discount.active ? "Active" : "Inactive"}</td>
                     <td>
                       <button
                         className={styles.inlineButton}
                         type="button"
-                        onClick={() => setDefaultDiscountForm(discount)}
+                        onClick={() => {
+                          // Migrate old enum values (TUITION/TRANSPORT) to fee type IDs
+                          let applicableOn = discount.applicableOn;
+                          if (applicableOn === "TUITION") {
+                            const match = feeTypes.find((t) => t.name.toLowerCase().includes("tuition") || t.name.toLowerCase().includes("tution"));
+                            if (match) applicableOn = String(match.id);
+                          } else if (applicableOn === "TRANSPORT") {
+                            const match = feeTypes.find((t) => t.name.toLowerCase().includes("transport"));
+                            if (match) applicableOn = String(match.id);
+                          }
+                          setDefaultDiscountForm({ ...discount, applicableOn });
+                        }}
                       >
                         Edit
                       </button>
@@ -1998,7 +2594,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           <div className={styles.sectionTitle}>Student Discounts</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Student
+              Student <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={studentDiscountForm.studentId}
@@ -2009,13 +2605,13 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
                 <option value="">Select</option>
                 {(feeStudents.length ? feeStudents : students).map((student) => (
                   <option key={student.id} value={student.id}>
-                    {student.name} ({student.classCode})
+                    {student.name} (Roll: {student.rollNumber})
                   </option>
                 ))}
               </select>
             </label>
             <label className={styles.label}>
-              Discount
+              Discount <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={studentDiscountForm.discountId || ""}
@@ -2037,7 +2633,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           </div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              Start Date
+              Start Date <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -2048,7 +2644,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              End Date
+              End Date <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="date"
@@ -2059,7 +2655,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Active
+              Active <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={studentDiscountForm.active ? "Yes" : "No"}
@@ -2136,7 +2732,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
           <div className={styles.sectionTitle}>Fine Rules</div>
           <div className={styles.fieldRow}>
             <label className={styles.label}>
-              From (delay in days)
+              From (delay in days) <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -2149,7 +2745,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              To (delay in days)
+              To (delay in days) <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -2162,7 +2758,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Fine Type
+              Fine Type <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={fineRuleForm.fineType}
@@ -2178,7 +2774,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               </select>
             </label>
             <label className={styles.label}>
-              Fine Amount (₹)
+              Fine Amount (₹) <span style={{ color: "#dc2626" }}>*</span>
               <input
                 className={styles.input}
                 type="number"
@@ -2191,7 +2787,7 @@ export default function FeeManagement({ students, isLoading, classCode: activeCl
               />
             </label>
             <label className={styles.label}>
-              Active
+              Active <span style={{ color: "#dc2626" }}>*</span>
               <select
                 className={styles.input}
                 value={fineRuleForm.active ? "Yes" : "No"}

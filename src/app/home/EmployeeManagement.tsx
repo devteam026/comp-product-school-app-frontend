@@ -74,11 +74,17 @@ const emptyTeacherDetails = (): TeacherDetails => ({
 });
 
 const departmentOptions = ["Teaching", "Accounts", "Admin", "Transport","Hostel"] as const;
-const designationOptions = DESIGNATION_OPTIONS;
+const allDesignationOptions = DESIGNATION_OPTIONS;
 const employmentTypeOptions = ["Full-time", "Part-time", "Contract"] as const;
 
 const sanitizeDigits = (value: string, maxLen: number) =>
   value.replace(/\D/g, "").slice(0, maxLen);
+
+const isValidDate = (val: string): boolean => {
+  if (!val) return false;
+  const d = new Date(val);
+  return !isNaN(d.getTime());
+};
 
 const emptyEmployee = (): Employee => ({
   firstName: "",
@@ -160,6 +166,8 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     {}
   );
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [deptDesignationMap, setDeptDesignationMap] = useState<Record<string, string[]>>({});
   const [selectedFiles, setSelectedFiles] = useState<Record<string, string>>({});
   const [editSelectedFiles, setEditSelectedFiles] = useState<Record<string, string>>(
     {}
@@ -176,12 +184,27 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     const load = async () => {
       setIsFetching(true);
       const token = window.localStorage.getItem("authToken");
-      const response = await fetch(apiUrl("/api/employees"), {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (response.ok) {
-        const data = (await response.json()) as Employee[];
+      const [empRes, deptRes, rolesRes] = await Promise.all([
+        fetch(apiUrl("/api/employees"), {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
+        fetch(apiUrl("/api/school/dept-designations"), {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
+        fetch(apiUrl("/api/system-roles"), {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
+      ]);
+      if (empRes.ok) {
+        const data = (await empRes.json()) as Employee[];
         setEmployees(Array.isArray(data) ? data : []);
+      }
+      if (deptRes.ok) {
+        setDeptDesignationMap(await deptRes.json());
+      }
+      if (rolesRes.ok) {
+        const rolesData = await rolesRes.json();
+        setRoleOptions(Array.isArray(rolesData) ? rolesData.map((r: { name: string }) => r.name) : []);
       }
       setIsFetching(false);
     };
@@ -206,22 +229,26 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     return () => window.clearTimeout(timer);
   }, [classMessage]);
 
-  const openClassModal = () => {
-    if (roleValue !== "teacher" || !roleEmployeeId) return;
+  const openClassModal = (empId?: string) => {
+    const targetId = empId ?? roleEmployeeId;
+    if (!targetId) return;
     setShowClassModal(true);
     setIsClassLoading(true);
+    setClassMessage(null);
     const token = window.localStorage.getItem("authToken");
-    fetch(apiUrl("/api/classes"), {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: string[]) => {
-        setClassOptions(Array.isArray(data) ? data : []);
+    Promise.all([
+      fetch(apiUrl("/api/classes"), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      }).then((res) => (res.ok ? res.json() : [])),
+      fetch(apiUrl(`/api/employees/${targetId}/classes`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      }).then((res) => (res.ok ? res.json() : [])),
+    ])
+      .then(([allClasses, assigned]: [string[], string[]]) => {
+        setClassOptions(Array.isArray(allClasses) ? allClasses : []);
+        setClassSelection(Array.isArray(assigned) ? assigned : []);
       })
-      .finally(() => {
-        setClassSelection([]);
-        setIsClassLoading(false);
-      });
+      .finally(() => setIsClassLoading(false));
   };
   const handleChange = (key: keyof Employee, value: string | number | boolean) => {
     setForm((prev) => ({
@@ -456,8 +483,30 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     if (form.emergencyContactNumber && !/^\d{10}$/.test(form.emergencyContactNumber)) {
       errors.emergencyContactNumber = "Emergency contact number must be 10 digits.";
     }
+    if (form.aadhaarNumber && !/^\d{12}$/.test(form.aadhaarNumber)) {
+      errors.aadhaarNumber = "Aadhaar Number must be exactly 12 digits.";
+    }
+    if (form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(form.panNumber)) {
+      errors.panNumber = "PAN must be 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).";
+    }
+    if (form.dateOfBirth && !isValidDate(form.dateOfBirth)) {
+      errors.dateOfBirth = "Date of Birth must be a valid date.";
+    }
+    if (form.dateOfJoining && !isValidDate(form.dateOfJoining)) {
+      errors.dateOfJoining = "Date of Joining must be a valid date.";
+    }
+    if (form.probationPeriod && !/^\d+$/.test(String(form.probationPeriod).trim())) {
+      errors.probationPeriod = "Probation Period must be a number (in days).";
+    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      const firstErrorField = Object.keys(errors)[0];
+      setTimeout(() => {
+        const el = document.getElementById(`add_${firstErrorField}`);
+        if (el) (el as HTMLElement).focus();
+      }, 0);
+      return;
+    }
     setIsSaving(true);
     setSaveMessage(null);
     try {
@@ -542,8 +591,30 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     if (editState.emergencyContactNumber && !/^\d{10}$/.test(editState.emergencyContactNumber)) {
       errors.emergencyContactNumber = "Emergency contact number must be 10 digits.";
     }
+    if (editState.aadhaarNumber && !/^\d{12}$/.test(editState.aadhaarNumber)) {
+      errors.aadhaarNumber = "Aadhaar Number must be exactly 12 digits.";
+    }
+    if (editState.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(editState.panNumber)) {
+      errors.panNumber = "PAN must be 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).";
+    }
+    if (editState.dateOfBirth && !isValidDate(editState.dateOfBirth)) {
+      errors.dateOfBirth = "Date of Birth must be a valid date.";
+    }
+    if (editState.dateOfJoining && !isValidDate(editState.dateOfJoining)) {
+      errors.dateOfJoining = "Date of Joining must be a valid date.";
+    }
+    if (editState.probationPeriod && !/^\d+$/.test(String(editState.probationPeriod).trim())) {
+      errors.probationPeriod = "Probation Period must be a number (in days).";
+    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      const firstErrorField = Object.keys(errors)[0];
+      setTimeout(() => {
+        const el = document.getElementById(`edit_${firstErrorField}`);
+        if (el) (el as HTMLElement).focus();
+      }, 0);
+      return;
+    }
     setIsSaving(true);
     setSaveMessage(null);
     try {
@@ -609,8 +680,34 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
     }
   };
 
-  const rows = useMemo(() => employees, [employees]);
-  const roleOptions = ["admin", "teacher", "parent", "student", "accountant"];
+  const deptOptions = Object.keys(deptDesignationMap).length > 0
+    ? Object.keys(deptDesignationMap)
+    : [...departmentOptions];
+
+  const getDesignationsForDept = (dept: string): string[] => {
+    if (!dept || !deptDesignationMap[dept] || deptDesignationMap[dept].length === 0) {
+      return [...allDesignationOptions];
+    }
+    return deptDesignationMap[dept];
+  };
+
+  const rows = useMemo(() => {
+    if (!searchQuery.trim()) return employees;
+    const q = searchQuery.trim().toLowerCase();
+    return employees.filter((e) => {
+      const fullName = `${e.firstName} ${e.lastName}`.toLowerCase();
+      const empId = String(e.employeeId ?? e.id ?? "").toLowerCase();
+      return (
+        fullName.includes(q) ||
+        empId.includes(q) ||
+        e.department.toLowerCase().includes(q) ||
+        e.designation.toLowerCase().includes(q) ||
+        e.mobileNumber.includes(q) ||
+        e.email.toLowerCase().includes(q)
+      );
+    });
+  }, [employees, searchQuery]);
+  const [roleOptions, setRoleOptions] = useState<string[]>([]);
   const filteredEmployees = roleDepartment
     ? employees.filter((employee) => employee.department === roleDepartment)
     : employees;
@@ -671,6 +768,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Gender <span className={styles.requiredMark}>*</span>
               <select
+                id="add_gender"
                 className={styles.input}
                 value={form.gender}
                 onChange={(e) => handleChange("gender", e.target.value)}
@@ -688,6 +786,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Date of Birth <span className={styles.requiredMark}>*</span>
               <input
+                id="add_dateOfBirth"
                 className={styles.input}
                 type="date"
                 value={form.dateOfBirth}
@@ -725,6 +824,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Mobile Number <span className={styles.requiredMark}>*</span>
               <input
+                id="add_mobileNumber"
                 className={styles.input}
                 value={form.mobileNumber}
                 onChange={(e) =>
@@ -765,6 +865,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Address Line 1 <span className={styles.requiredMark}>*</span>
               <input
+                id="add_addressLine1"
                 className={styles.input}
                 value={form.addressLine1}
                 onChange={(e) => handleChange("addressLine1", e.target.value)}
@@ -785,6 +886,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               City <span className={styles.requiredMark}>*</span>
               <input
+                id="add_city"
                 className={styles.input}
                 value={form.city}
                 onChange={(e) => handleChange("city", e.target.value)}
@@ -797,6 +899,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               State <span className={styles.requiredMark}>*</span>
               <input
+                id="add_state"
                 className={styles.input}
                 value={form.state}
                 onChange={(e) => handleChange("state", e.target.value)}
@@ -809,6 +912,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               PIN Code <span className={styles.requiredMark}>*</span>
               <input
+                id="add_pinCode"
                 className={styles.input}
                 value={form.pinCode}
                 onChange={(e) =>
@@ -825,6 +929,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Emergency Contact Name <span className={styles.requiredMark}>*</span>
               <input
+                id="add_emergencyContactName"
                 className={styles.input}
                 value={form.emergencyContactName}
                 onChange={(e) => handleChange("emergencyContactName", e.target.value)}
@@ -839,6 +944,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Emergency Contact Number <span className={styles.requiredMark}>*</span>
               <input
+                id="add_emergencyContactNumber"
                 className={styles.input}
                 value={form.emergencyContactNumber}
                 onChange={(e) =>
@@ -861,6 +967,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Highest Qualification <span className={styles.requiredMark}>*</span>
               <input
+                id="add_highestQualification"
                 className={styles.input}
                 value={form.highestQualification}
                 onChange={(e) => handleChange("highestQualification", e.target.value)}
@@ -873,6 +980,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Specialization <span className={styles.requiredMark}>*</span>
               <input
+                id="add_specialization"
                 className={styles.input}
                 value={form.specialization}
                 onChange={(e) => handleChange("specialization", e.target.value)}
@@ -885,6 +993,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               University Name <span className={styles.requiredMark}>*</span>
               <input
+                id="add_universityName"
                 className={styles.input}
                 value={form.universityName}
                 onChange={(e) => handleChange("universityName", e.target.value)}
@@ -897,6 +1006,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Year of Passing <span className={styles.requiredMark}>*</span>
               <input
+                id="add_yearOfPassing"
                 className={styles.input}
                 value={form.yearOfPassing ?? ""}
                 onChange={(e) =>
@@ -916,6 +1026,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Experience (Years) <span className={styles.requiredMark}>*</span>
               <input
+                id="add_experienceYears"
                 className={styles.input}
                 value={form.experienceYears ?? ""}
                 onChange={(e) =>
@@ -955,13 +1066,17 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Department <span className={styles.requiredMark}>*</span>
               <select
+                id="add_department"
                 className={styles.input}
                 value={form.department}
-                onChange={(e) => handleChange("department", e.target.value)}
+                onChange={(e) => {
+                  handleChange("department", e.target.value);
+                  handleChange("designation", "");
+                }}
                 required
               >
                 <option value="">Select</option>
-                {departmentOptions.map((option) => (
+                {deptOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -974,13 +1089,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Designation <span className={styles.requiredMark}>*</span>
               <select
+                id="add_designation"
                 className={styles.input}
                 value={form.designation}
                 onChange={(e) => handleChange("designation", e.target.value)}
                 required
               >
                 <option value="">Select</option>
-                {designationOptions.map((option) => (
+                {getDesignationsForDept(form.department).map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -993,6 +1109,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Employment Type <span className={styles.requiredMark}>*</span>
               <select
+                id="add_employmentType"
                 className={styles.input}
                 value={form.employmentType}
                 onChange={(e) => handleChange("employmentType", e.target.value)}
@@ -1012,6 +1129,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Date of Joining <span className={styles.requiredMark}>*</span>
               <input
+                id="add_dateOfJoining"
                 className={styles.input}
                 type="date"
                 value={form.dateOfJoining}
@@ -1023,12 +1141,20 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </label>
             <label className={styles.label}>
-              Probation Period
+              Probation Period (days)
               <input
+                id="add_probationPeriod"
                 className={styles.input}
                 value={form.probationPeriod}
-                onChange={(e) => handleChange("probationPeriod", e.target.value)}
+                onChange={(e) =>
+                  handleChange("probationPeriod", sanitizeDigits(e.target.value, 5))
+                }
+                inputMode="numeric"
+                maxLength={5}
               />
+              {fieldErrors.probationPeriod ? (
+                <span className={styles.error}>{fieldErrors.probationPeriod}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
               Work Location / Branch
@@ -1053,9 +1179,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               Aadhaar Number <span className={styles.requiredMark}>*</span>
               <input
+                id="add_aadhaarNumber"
                 className={styles.input}
                 value={form.aadhaarNumber}
-                onChange={(e) => handleChange("aadhaarNumber", e.target.value)}
+                onChange={(e) =>
+                  handleChange("aadhaarNumber", sanitizeDigits(e.target.value, 12))
+                }
+                inputMode="numeric"
+                maxLength={12}
                 required
               />
               {fieldErrors.aadhaarNumber ? (
@@ -1065,10 +1196,17 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             <label className={styles.label}>
               PAN Number
               <input
+                id="add_panNumber"
                 className={styles.input}
                 value={form.panNumber}
-                onChange={(e) => handleChange("panNumber", e.target.value)}
+                onChange={(e) =>
+                  handleChange("panNumber", e.target.value.toUpperCase())
+                }
+                maxLength={10}
               />
+              {fieldErrors.panNumber ? (
+                <span className={styles.error}>{fieldErrors.panNumber}</span>
+              ) : null}
             </label>
             <label className={styles.label}>
               Passport Number
@@ -1190,6 +1328,16 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
             </>
           ) : null}
 
+          {Object.keys(fieldErrors).length > 0 ? (
+            <div className={styles.errorSummary}>
+              <strong>Please fix the following errors:</strong>
+              <ul className={styles.errorSummaryList}>
+                {Object.values(fieldErrors).map((msg, i) => (
+                  <li key={i}>{msg}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className={styles.formActions}>
             <button className={styles.button} type="submit" disabled={isSaving}>
               {isSaving ? "Saving..." : "Add Employee"}
@@ -1200,61 +1348,118 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
           </div>
         </form>
       ) : activeTab === "List Employees" ? (
-        <div className={styles.tableResponsive}>
-          {rows.length === 0 ? (
-            <div className={styles.empty}>No employees added yet.</div>
-          ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Employee ID</th>
-                  <th>Name</th>
-                  <th>Department</th>
-                  <th>Designation</th>
-                  <th>Mobile</th>
-                  <th>Email</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((employee) => (
-                  <tr key={employee.id}>
-                    <td>{employee.employeeId ?? employee.id}</td>
-                    <td>
-                      {employee.firstName} {employee.lastName}
-                    </td>
-                    <td>{employee.department}</td>
-                    <td>{employee.designation}</td>
-                    <td>{employee.mobileNumber}</td>
-                    <td>{employee.email}</td>
-                    <td className={styles.actionCell}>
-                      <button
-                        className={styles.inlineButtonView}
-                        type="button"
-                        onClick={() => startView(employee)}
-                      >
-                        View
-                      </button>
-                      <button
-                        className={styles.inlineButton}
-                        type="button"
-                        onClick={() => startEdit(employee)}
-                      >
-                        Edit
-                      </button>
-                    </td>
+        <div>
+          {saveMessage ? (
+            <div className={styles.success} style={{ marginBottom: 12 }}>{saveMessage}</div>
+          ) : null}
+          <div className={styles.listSearchBar}>
+            <input
+              className={styles.listSearchInput}
+              type="text"
+              placeholder="Search by name, ID, department, designation, mobile, email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery ? (
+              <button
+                className={styles.listSearchClear}
+                type="button"
+                onClick={() => setSearchQuery("")}
+              >
+                ✕
+              </button>
+            ) : null}
+          </div>
+          <div className={styles.tableResponsive}>
+            {employees.length === 0 ? (
+              <div className={styles.empty}>No employees added yet.</div>
+            ) : rows.length === 0 ? (
+              <div className={styles.empty}>No employees match your search.</div>
+            ) : (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Employee ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Mobile</th>
+                    <th>Email</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {rows.map((employee) => (
+                    <tr key={employee.id}>
+                      <td>{employee.employeeId ?? employee.id}</td>
+                      <td>
+                        {employee.firstName} {employee.lastName}
+                      </td>
+                      <td>{employee.department}</td>
+                      <td>{employee.designation}</td>
+                      <td>{employee.mobileNumber}</td>
+                      <td>{employee.email}</td>
+                      <td className={styles.actionCell}>
+                        <button
+                          className={styles.inlineButtonView}
+                          type="button"
+                          onClick={() => startView(employee)}
+                        >
+                          View
+                        </button>
+                        <button
+                          className={styles.inlineButton}
+                          type="button"
+                          onClick={() => startEdit(employee)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className={styles.inlineButtonDelete}
+                          type="button"
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                `Are you sure you want to delete "${employee.firstName} ${employee.lastName}"? This action cannot be undone.`
+                              )
+                            )
+                              return;
+                            const token = window.localStorage.getItem("authToken");
+                            const response = await fetch(
+                              apiUrl(`/api/employees/${employee.id}`),
+                              {
+                                method: "DELETE",
+                                headers: token
+                                  ? { Authorization: `Bearer ${token}` }
+                                  : undefined,
+                              }
+                            );
+                            if (response.ok) {
+                              setEmployees((prev) =>
+                                prev.filter((e) => e.id !== employee.id)
+                              );
+                              setSaveMessage("Employee deleted successfully.");
+                            } else {
+                              setSaveMessage("Failed to delete employee.");
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       ) : (
         <div className={styles.form}>
           <div className={styles.sectionTitle}>Role Setup</div>
           <div className={styles.fieldGrid}>
             <label className={styles.label}>
-              Department
+              Department <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={roleDepartment}
@@ -1264,7 +1469,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                 }}
               >
                 <option value="">Select</option>
-                {departmentOptions.map((option) => (
+                {deptOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -1272,7 +1477,8 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </select>
             </label>
             <label className={styles.label}>
-              Employee (Username = 4-digit Employee ID, e.g. 0001)
+              Employee <span className={styles.requiredMark}>*</span>
+              <span style={{ fontSize: 12, color: "#64748b", fontWeight: 400 }}> (Username = 4-digit Employee ID, e.g. 0001)</span>
               <select
                 className={styles.input}
                 value={roleEmployeeId}
@@ -1288,7 +1494,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </select>
             </label>
             <label className={styles.label}>
-              Role
+              Role <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={roleValue}
@@ -1303,7 +1509,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </select>
             </label>
             <label className={styles.label}>
-              Password
+              Password {updatePassword && <span className={styles.requiredMark}>*</span>}
               <input
                 className={styles.input}
                 type="password"
@@ -1313,7 +1519,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Retype Password
+              Retype Password {updatePassword && <span className={styles.requiredMark}>*</span>}
               <input
                 className={styles.input}
                 type="password"
@@ -1323,7 +1529,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               />
             </label>
             <label className={styles.label}>
-              Update Password
+              Update Password <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={updatePassword ? "yes" : "no"}
@@ -1334,7 +1540,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               </select>
             </label>
             <label className={styles.label}>
-              Status
+              Status <span className={styles.requiredMark}>*</span>
               <select
                 className={styles.input}
                 value={roleActive ? "active" : "inactive"}
@@ -1485,9 +1691,10 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                                 className={styles.inlineButton}
                                 type="button"
                                 onClick={() => {
-                                  setRoleEmployeeId(String(employee.id));
+                                  const eid = String(employee.id);
+                                  setRoleEmployeeId(eid);
                                   setRoleValue("teacher");
-                                  openClassModal();
+                                  openClassModal(eid);
                                 }}
                               >
                                 Assign Classes
@@ -1533,24 +1740,27 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : classOptions.length === 0 ? (
                 <div className={styles.empty}>No classes available.</div>
               ) : (
-                <div className={styles.profileGrid}>
+                <ul className={styles.classCheckList}>
                   {classOptions.map((code) => (
-                    <label key={code} className={styles.label}>
-                      <input
-                        type="checkbox"
-                        checked={classSelection.includes(code)}
-                        onChange={(e) => {
-                          setClassSelection((prev) =>
-                            e.target.checked
-                              ? [...prev, code]
-                              : prev.filter((item) => item !== code)
-                          );
-                        }}
-                      />
-                      <span>{code}</span>
-                    </label>
+                    <li key={code} className={styles.classCheckItem}>
+                      <label className={styles.classCheckLabel}>
+                        <input
+                          type="checkbox"
+                          className={styles.classCheckbox}
+                          checked={classSelection.includes(code)}
+                          onChange={(e) => {
+                            setClassSelection((prev) =>
+                              e.target.checked
+                                ? [...prev, code]
+                                : prev.filter((item) => item !== code)
+                            );
+                          }}
+                        />
+                        <span>{code}</span>
+                      </label>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
             <div className={styles.modalFooter}>
@@ -1576,7 +1786,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   );
                   if (response.ok) {
                     setClassMessage("Classes assigned successfully.");
-                    setShowClassModal(false);
+                    setTimeout(() => setShowClassModal(false), 1200);
                   } else {
                     let message = "Failed to assign classes.";
                     try {
@@ -1790,6 +2000,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   <label className={styles.label}>
                     Gender <span className={styles.requiredMark}>*</span>
                     <select
+                      id="edit_gender"
                       className={styles.input}
                       value={editState.gender}
                       onChange={(e) => handleEditChange("gender", e.target.value)}
@@ -1807,6 +2018,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   <label className={styles.label}>
                     Date of Birth <span className={styles.requiredMark}>*</span>
                     <input
+                      id="edit_dateOfBirth"
                       className={styles.input}
                       type="date"
                       value={editState.dateOfBirth}
@@ -1853,6 +2065,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   <label className={styles.label}>
                     Mobile <span className={styles.requiredMark}>*</span>
                     <input
+                      id="edit_mobileNumber"
                       className={styles.input}
                       value={editState.mobileNumber}
                       onChange={(e) =>
@@ -2102,13 +2315,15 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     <select
                       className={styles.input}
                       value={editState.department}
-                      onChange={(e) =>
-                        handleEditChange("department", e.target.value)
-                      }
+                      onChange={(e) => {
+                        setEditState((prev) =>
+                          prev ? { ...prev, department: e.target.value, designation: "" } : prev
+                        );
+                      }}
                       required
                     >
                       <option value="">Select</option>
-                      {departmentOptions.map((option) => (
+                      {deptOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
                         </option>
@@ -2129,7 +2344,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                       required
                     >
                       <option value="">Select</option>
-                      {designationOptions.map((option) => (
+                      {getDesignationsForDept(editState.department).map((option) => (
                         <option key={option} value={option}>
                           {option}
                         </option>
@@ -2165,6 +2380,7 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   <label className={styles.label}>
                     Date of Joining <span className={styles.requiredMark}>*</span>
                     <input
+                      id="edit_dateOfJoining"
                       className={styles.input}
                       type="date"
                       value={editState.dateOfJoining}
@@ -2178,14 +2394,20 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                     ) : null}
                   </label>
                   <label className={styles.label}>
-                    Probation Period
+                    Probation Period (days)
                     <input
+                      id="edit_probationPeriod"
                       className={styles.input}
                       value={editState.probationPeriod}
                       onChange={(e) =>
-                        handleEditChange("probationPeriod", e.target.value)
+                        handleEditChange("probationPeriod", sanitizeDigits(e.target.value, 5))
                       }
+                      inputMode="numeric"
+                      maxLength={5}
                     />
+                    {fieldErrors.probationPeriod ? (
+                      <span className={styles.error}>{fieldErrors.probationPeriod}</span>
+                    ) : null}
                   </label>
                 </div>
               </div>
@@ -2195,11 +2417,14 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   <label className={styles.label}>
                     Aadhaar Number <span className={styles.requiredMark}>*</span>
                     <input
+                      id="edit_aadhaarNumber"
                       className={styles.input}
                       value={editState.aadhaarNumber}
                       onChange={(e) =>
-                        handleEditChange("aadhaarNumber", e.target.value)
+                        handleEditChange("aadhaarNumber", sanitizeDigits(e.target.value, 12))
                       }
+                      inputMode="numeric"
+                      maxLength={12}
                       required
                     />
                     {fieldErrors.aadhaarNumber ? (
@@ -2209,12 +2434,17 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
                   <label className={styles.label}>
                     PAN Number
                     <input
+                      id="edit_panNumber"
                       className={styles.input}
                       value={editState.panNumber}
                       onChange={(e) =>
-                        handleEditChange("panNumber", e.target.value)
+                        handleEditChange("panNumber", e.target.value.toUpperCase())
                       }
+                      maxLength={10}
                     />
+                    {fieldErrors.panNumber ? (
+                      <span className={styles.error}>{fieldErrors.panNumber}</span>
+                    ) : null}
                   </label>
                   <label className={styles.label}>
                     Passport Number
@@ -2380,6 +2610,16 @@ export default function EmployeeManagement({ isLoading }: EmployeeManagementProp
               ) : null}
             </div>
             <div className={styles.modalFooter}>
+              {Object.keys(fieldErrors).length > 0 ? (
+                <div className={styles.errorSummary}>
+                  <strong>Please fix the following errors:</strong>
+                  <ul className={styles.errorSummaryList}>
+                    {Object.values(fieldErrors).map((msg, i) => (
+                      <li key={i}>{msg}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <button
                 className={styles.button}
                 type="button"
